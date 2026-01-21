@@ -69,6 +69,37 @@
             color: #ef6c00;
         }
         
+        .status.sync-disabled {
+            background: #ffebee;
+            color: #c62828;
+        }
+        
+        .sync-warning {
+            background: #fff3e0;
+            border: 2px solid #ff9800;
+            border-radius: 10px;
+            padding: 12px;
+            margin-bottom: 16px;
+            display: none;
+            text-align: center;
+        }
+        
+        .sync-warning.show {
+            display: block;
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+        
+        .sync-warning strong {
+            color: #e65100;
+            display: block;
+            margin-bottom: 4px;
+        }
+        
         textarea {
             width: 100%;
             height: 200px;
@@ -192,6 +223,11 @@
             <button class="btn-clear install-btn" onclick="installPWA()">添加到主屏幕</button>
         </div>
         
+        <div class="sync-warning" id="syncWarning">
+            <strong>⚠️ 电脑端同步已关闭</strong>
+            <p style="font-size:12px;color:#666;">请在电脑托盘图标上启用同步</p>
+        </div>
+        
         <div class="status disconnected" id="status">
             未连接 / Disconnected
         </div>
@@ -217,6 +253,7 @@
     <script>
         let ws = null;
         let isConnected = false;
+        let syncEnabled = true;
         let deferredPrompt = null;
         
         const statusEl = document.getElementById('status');
@@ -224,6 +261,7 @@
         const sendBtn = document.getElementById('sendBtn');
         const toastEl = document.getElementById('toast');
         const installPrompt = document.getElementById('installPrompt');
+        const syncWarning = document.getElementById('syncWarning');
         
         // Auto-connect on load
         window.onload = function() {
@@ -268,16 +306,27 @@
                     
                     if (data.type === 'connected') {
                         isConnected = true;
-                        setStatus('connected', '✓ 已连接 / Connected');
+                        syncEnabled = data.sync_enabled !== false;
+                        updateSyncState();
                         sendBtn.disabled = false;
                     } else if (data.type === 'ack') {
                         showToast('✓ 已发送！');
                         textInput.value = '';
+                    } else if (data.type === 'sync_disabled') {
+                        showToast('⚠️ 电脑端同步已关闭');
+                    } else if (data.type === 'sync_state') {
+                        syncEnabled = data.sync_enabled !== false;
+                        updateSyncState();
+                    } else if (data.type === 'pong') {
+                        syncEnabled = data.sync_enabled !== false;
+                        updateSyncState();
                     }
                 };
                 
                 ws.onclose = function() {
                     isConnected = false;
+                    syncEnabled = true;
+                    syncWarning.classList.remove('show');
                     setStatus('disconnected', '连接断开，点击重连 / Tap to reconnect');
                     sendBtn.disabled = true;
                     
@@ -299,6 +348,20 @@
             statusEl.className = 'status ' + type;
             statusEl.textContent = text;
             statusEl.onclick = type === 'disconnected' ? connect : null;
+        }
+        
+        function updateSyncState() {
+            if (!isConnected) return;
+            
+            if (syncEnabled) {
+                setStatus('connected', '✓ 已连接 / Connected');
+                syncWarning.classList.remove('show');
+                sendBtn.disabled = false;
+            } else {
+                setStatus('sync-disabled', '⚠️ 已连接但同步已关闭');
+                syncWarning.classList.add('show');
+                sendBtn.disabled = true;
+            }
         }
         
         function sendText() {

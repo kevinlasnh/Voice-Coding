@@ -54,6 +54,8 @@ class AppState:
         self.ws_port = WS_PORT
         self.http_port = HTTP_PORT
         self.connected_clients = set()
+        self.blink_state = False  # For icon blinking / 图标闪烁状态
+        self.blink_timer: Optional[threading.Timer] = None
         
 state = AppState()
 
@@ -153,22 +155,32 @@ async def handle_client(websocket):
     state.connected_clients.add(websocket)
     print(f"Client connected: {client_addr}")
     
+    # Update tray icon when client connects
+    if state.tray_icon:
+        update_tray_icon(state.tray_icon)
+    
     try:
-        # Send welcome message
+        # Send welcome message with current sync state
         await websocket.send(json.dumps({
             "type": "connected",
-            "message": "Connected to Voice Coding server"
+            "message": "Connected to Voice Coding server",
+            "sync_enabled": state.sync_enabled
         }))
         
         async for message in websocket:
-            if not state.sync_enabled:
-                continue
-                
             try:
                 data = json.loads(message)
                 msg_type = data.get("type", "")
                 
                 if msg_type == "text":
+                    # Check if sync is enabled
+                    if not state.sync_enabled:
+                        await websocket.send(json.dumps({
+                            "type": "sync_disabled",
+                            "message": "Sync is disabled on PC"
+                        }))
+                        continue
+                    
                     text = data.get("content", "")
                     if text:
                         # Type the received text
@@ -180,13 +192,15 @@ async def handle_client(websocket):
                         }))
                         
                 elif msg_type == "ping":
+                    # Respond with pong and current sync state
                     await websocket.send(json.dumps({
-                        "type": "pong"
+                        "type": "pong",
+                        "sync_enabled": state.sync_enabled
                     }))
                     
             except json.JSONDecodeError:
                 # If not JSON, treat as plain text
-                if message.strip():
+                if message.strip() and state.sync_enabled:
                     type_text(message)
                     
     except websockets.exceptions.ConnectionClosed:
@@ -194,6 +208,27 @@ async def handle_client(websocket):
     finally:
         state.connected_clients.discard(websocket)
         print(f"Client disconnected: {client_addr}")
+        
+        # Update tray icon when client disconnects
+        if state.tray_icon:
+            update_tray_icon(state.tray_icon)
+
+
+async def broadcast_sync_state():
+    """Broadcast sync state to all connected clients / 广播同步状态给所有客户端"""
+    if not state.connected_clients:
+        return
+    
+    message = json.dumps({
+        "type": "sync_state",
+        "sync_enabled": state.sync_enabled
+    })
+    
+    for client in state.connected_clients.copy():
+        try:
+            await client.send(message)
+        except:
+            pass
 
 
 async def start_server():
@@ -259,13 +294,13 @@ def run_http_server():
 # ============================================================
 # System Tray / 系统托盘
 # ============================================================
-def create_icon_active() -> Image.Image:
-    """Create active state tray icon / 创建运行状态托盘图标"""
+def create_icon_connected() -> Image.Image:
+    """Create connected state tray icon (green) / 创建已连接状态托盘图标（绿色）"""
     size = 64
     image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(image)
     
-    # Green background circle
+    # Green background circle - connected
     draw.ellipse([4, 4, size-4, size-4], fill='#4CAF50')
     
     # White "V" shape for Voice
@@ -273,6 +308,42 @@ def create_icon_active() -> Image.Image:
         (16, 20), (32, 44), (48, 20),
         (42, 20), (32, 36), (22, 20)
     ], fill='white')
+    
+    return image
+
+
+def create_icon_waiting() -> Image.Image:
+    """Create waiting state tray icon (blue) / 创建等待连接状态托盘图标（蓝色）"""
+    size = 64
+    image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    
+    # Blue background circle - waiting for connection
+    draw.ellipse([4, 4, size-4, size-4], fill='#2196F3')
+    
+    # White "V" shape for Voice
+    draw.polygon([
+        (16, 20), (32, 44), (48, 20),
+        (42, 20), (32, 36), (22, 20)
+    ], fill='white')
+    
+    return image
+
+
+def create_icon_waiting_dim() -> Image.Image:
+    """Create dim waiting state tray icon (dark blue) / 创建暗淡等待状态托盘图标（深蓝色）"""
+    size = 64
+    image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    
+    # Darker blue background circle - for blinking effect
+    draw.ellipse([4, 4, size-4, size-4], fill='#1565C0')
+    
+    # Dimmer white "V" shape
+    draw.polygon([
+        (16, 20), (32, 44), (48, 20),
+        (42, 20), (32, 36), (22, 20)
+    ], fill='#B3E5FC')
     
     return image
 
@@ -297,6 +368,15 @@ def toggle_sync(icon, menu_item):
     """Toggle sync on/off / 切换同步开关"""
     state.sync_enabled = not state.sync_enabled
     update_tray_icon(icon)
+    
+    # Broadcast sync state to all connected clients
+    def send_sync_state():
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        loop.run_until_complete(broadcast_sync_state())
+        loop.close()
+    
+    threading.Thread(target=send_sync_state, daemon=True).start()
 
 
 def toggle_startup(icon, menu_item):
@@ -322,17 +402,56 @@ def show_ip_address(icon, menu_item):
 def quit_app(icon, menu_item):
     """Quit the application / 退出应用"""
     state.running = False
+    stop_blink_timer()
     icon.stop()
+
+
+def stop_blink_timer():
+    """Stop the blink timer / 停止闪烁定时器"""
+    if state.blink_timer:
+        state.blink_timer.cancel()
+        state.blink_timer = None
+
+
+def start_blink_timer(icon):
+    """Start the icon blink timer / 启动图标闪烁定时器"""
+    stop_blink_timer()
+    
+    def blink():
+        if not state.running:
+            return
+        if len(state.connected_clients) == 0 and state.sync_enabled:
+            # Toggle blink state
+            state.blink_state = not state.blink_state
+            if state.blink_state:
+                icon.icon = create_icon_waiting()
+            else:
+                icon.icon = create_icon_waiting_dim()
+            # Schedule next blink
+            state.blink_timer = threading.Timer(0.5, blink)
+            state.blink_timer.daemon = True
+            state.blink_timer.start()
+    
+    blink()
 
 
 def update_tray_icon(icon):
     """Update tray icon based on state / 根据状态更新托盘图标"""
-    if state.sync_enabled:
-        icon.icon = create_icon_active()
-        icon.title = f"Voice Coding - Active\nhttp://{HOTSPOT_IP}:{state.http_port}"
-    else:
+    stop_blink_timer()
+    
+    if not state.sync_enabled:
+        # Sync disabled - gray icon
         icon.icon = create_icon_paused()
         icon.title = f"Voice Coding - Paused\nhttp://{HOTSPOT_IP}:{state.http_port}"
+    elif len(state.connected_clients) > 0:
+        # Has connected clients - green icon
+        icon.icon = create_icon_connected()
+        client_count = len(state.connected_clients)
+        icon.title = f"Voice Coding - {client_count} Connected\nhttp://{HOTSPOT_IP}:{state.http_port}"
+    else:
+        # Waiting for connection - blue blinking icon
+        icon.title = f"Voice Coding - Waiting\nhttp://{HOTSPOT_IP}:{state.http_port}"
+        start_blink_timer(icon)
 
 
 def get_sync_text(item):
@@ -370,8 +489,8 @@ def run_tray():
     """Run the system tray application / 运行系统托盘应用"""
     icon = pystray.Icon(
         APP_NAME,
-        create_icon_active(),
-        f"Voice Coding\nhttp://{HOTSPOT_IP}:{state.http_port}",
+        create_icon_waiting(),  # Start with waiting icon / 启动时显示等待图标
+        f"Voice Coding - Waiting\nhttp://{HOTSPOT_IP}:{state.http_port}",
         menu=create_menu()
     )
     state.tray_icon = icon
@@ -380,11 +499,16 @@ def run_tray():
     icon.run_detached()
     icon.notify(f"已启动！\n1. 开启电脑热点\n2. 手机连接热点\n3. 访问 http://{HOTSPOT_IP}:{state.http_port}", "Voice Coding")
     
+    # Start blinking after icon is running
+    import time
+    time.sleep(0.5)  # Wait for icon to initialize
+    update_tray_icon(icon)  # This will start the blinking
+    
     # Keep main thread alive
     while state.running:
-        import time
         time.sleep(0.5)
     
+    stop_blink_timer()
     icon.stop()
 
 
