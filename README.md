@@ -89,9 +89,6 @@ Voice-Coding/
 │       ├── index.html     # 手机端页面
 │       ├── manifest.json  # PWA 配置
 │       └── sw.js          # Service Worker
-├── android/               # Android 原生客户端（可选）
-│   ├── main.py           # Kivy 主程序
-│   └── buildozer.spec    # 打包配置
 ├── CHANGELOG.md          # 更新日志
 ├── LICENSE               # 许可证
 └── README.md             # 本文件
