@@ -51,7 +51,6 @@ class AppState:
         self.running = True
         self.server = None
         self.tray_icon = None
-        self.local_ip = ""
         self.ws_port = WS_PORT
         self.http_port = HTTP_PORT
         self.connected_clients = set()
@@ -60,64 +59,10 @@ state = AppState()
 
 
 # ============================================================
-# Network Utilities / 网络工具
+# Network Configuration / 网络配置
 # ============================================================
-def get_all_ips() -> list:
-    """Get all local IP addresses / 获取所有本机IP地址"""
-    ips = []
-    try:
-        import subprocess
-        result = subprocess.run(
-            ['powershell', '-Command', 
-             "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.IPAddress -notlike '127.*' -and $_.IPAddress -notlike '169.254.*' } | Select-Object -ExpandProperty IPAddress"],
-            capture_output=True, text=True, timeout=5
-        )
-        if result.returncode == 0:
-            ips = [ip.strip() for ip in result.stdout.strip().split('\n') if ip.strip()]
-    except:
-        pass
-    return ips
-
-
-def get_hotspot_ip() -> str | None:
-    """Get Windows Mobile Hotspot IP (usually 192.168.137.1) / 获取热点IP"""
-    try:
-        import subprocess
-        result = subprocess.run(
-            ['powershell', '-Command', 
-             "Get-NetIPAddress -AddressFamily IPv4 | Where-Object { $_.InterfaceAlias -like '*本地连接*' -or $_.InterfaceAlias -like '*Local Area Connection*' } | Select-Object -ExpandProperty IPAddress"],
-            capture_output=True, text=True, timeout=5
-        )
-        if result.returncode == 0:
-            for ip in result.stdout.strip().split('\n'):
-                ip = ip.strip()
-                if ip.startswith('192.168.137.'):
-                    return ip
-    except:
-        pass
-    return None
-
-
-def get_local_ip() -> str:
-    """
-    Get the best local IP address for connection.
-    Priority: 1. Hotspot (192.168.137.x)  2. Regular LAN IP
-    获取最佳本机IP，优先使用热点IP
-    """
-    # First try hotspot IP
-    hotspot_ip = get_hotspot_ip()
-    if hotspot_ip:
-        return hotspot_ip
-    
-    # Fallback to regular method
-    try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip = s.getsockname()[0]
-        s.close()
-        return ip
-    except Exception:
-        return "127.0.0.1"
+# Windows Mobile Hotspot default IP / Windows 移动热点默认 IP
+HOTSPOT_IP = "192.168.137.1"
 
 
 # ============================================================
@@ -253,11 +198,9 @@ async def handle_client(websocket):
 
 async def start_server():
     """Start the WebSocket server / 启动WebSocket服务器"""
-    state.local_ip = get_local_ip()
-    
     try:
         async with serve(handle_client, "0.0.0.0", state.ws_port):
-            print(f"Server started at ws://{state.local_ip}:{state.ws_port}")
+            print(f"WebSocket server started at ws://{HOTSPOT_IP}:{state.ws_port}")
             # Keep server running
             while state.running:
                 await asyncio.sleep(1)
@@ -306,7 +249,7 @@ def run_http_server():
     """Run HTTP server for web UI / 运行HTTP服务器提供网页界面"""
     try:
         server = HTTPServer(('0.0.0.0', state.http_port), WebHandler)
-        print(f"HTTP server started at http://{state.local_ip}:{state.http_port}")
+        print(f"HTTP server started at http://{HOTSPOT_IP}:{state.http_port}")
         while state.running:
             server.handle_request()
     except Exception as e:
@@ -364,25 +307,7 @@ def toggle_startup(icon, menu_item):
 
 def show_ip_address(icon, menu_item):
     """Show IP address notification and copy to clipboard / 显示IP地址并复制"""
-    # Get all available IPs
-    all_ips = get_all_ips()
-    hotspot_ip = get_hotspot_ip()
-    
-    # Build message
-    web_url = f"http://{state.local_ip}:{state.http_port}"
-    
-    msg_lines = [f"📱 手机浏览器访问:", web_url, ""]
-    
-    if hotspot_ip:
-        msg_lines.append(f"🔥 热点IP: {hotspot_ip}:{state.http_port}")
-    
-    if len(all_ips) > 1:
-        msg_lines.append("其他IP:")
-        for ip in all_ips:
-            if ip != state.local_ip:
-                msg_lines.append(f"  {ip}:{state.http_port}")
-    
-    msg_lines.append("\n(已复制到剪贴板)")
+    web_url = f"http://{HOTSPOT_IP}:{state.http_port}"
     
     # Copy to clipboard
     try:
@@ -391,7 +316,7 @@ def show_ip_address(icon, menu_item):
     except:
         pass
     
-    icon.notify("\n".join(msg_lines), "Voice Coding")
+    icon.notify(f"📱 手机连接电脑热点后访问:\n{web_url}\n(已复制到剪贴板)", "Voice Coding")
 
 
 def quit_app(icon, menu_item):
@@ -404,10 +329,10 @@ def update_tray_icon(icon):
     """Update tray icon based on state / 根据状态更新托盘图标"""
     if state.sync_enabled:
         icon.icon = create_icon_active()
-        icon.title = f"Voice Coding - Active\nhttp://{state.local_ip}:{state.http_port}"
+        icon.title = f"Voice Coding - Active\nhttp://{HOTSPOT_IP}:{state.http_port}"
     else:
         icon.icon = create_icon_paused()
-        icon.title = f"Voice Coding - Paused\nhttp://{state.local_ip}:{state.http_port}"
+        icon.title = f"Voice Coding - Paused\nhttp://{HOTSPOT_IP}:{state.http_port}"
 
 
 def get_sync_text(item):
@@ -443,20 +368,17 @@ def create_menu():
 
 def run_tray():
     """Run the system tray application / 运行系统托盘应用"""
-    # Get IP first
-    state.local_ip = get_local_ip()
-    
     icon = pystray.Icon(
         APP_NAME,
         create_icon_active(),
-        f"Voice Coding\nhttp://{state.local_ip}:{state.http_port}",
+        f"Voice Coding\nhttp://{HOTSPOT_IP}:{state.http_port}",
         menu=create_menu()
     )
     state.tray_icon = icon
     
     # Show notification on start
     icon.run_detached()
-    icon.notify(f"已启动！手机浏览器访问:\nhttp://{state.local_ip}:{state.http_port}", "Voice Coding")
+    icon.notify(f"已启动！\n1. 开启电脑热点\n2. 手机连接热点\n3. 访问 http://{HOTSPOT_IP}:{state.http_port}", "Voice Coding")
     
     # Keep main thread alive
     while state.running:
@@ -471,9 +393,6 @@ def run_tray():
 # ============================================================
 def main():
     """Main entry point / 主入口"""
-    # Get local IP
-    state.local_ip = get_local_ip()
-    
     # Start WebSocket server in background thread
     ws_thread = threading.Thread(target=run_server, daemon=True)
     ws_thread.start()
