@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-02-02
+
+### Added / 新增
+- 📱 **Android 原生应用** - Flutter 开发
+  - WebSocket 实时通信
+  - 自动重连机制
+  - 连接状态显示
+  - Anthropic 风格深色主题 UI
+- 🤖 **GitHub Actions 自动构建**
+  - 每次提交自动构建 APK
+  - 自动发布到 GitHub Releases
+  - 无需本地安装 Android SDK
+
+### Changed / 变更
+- 📦 新增 `android/` 目录存放 Flutter 项目
+- 📁 APK 构建产物存放于 `android/apk/` 目录
+
+### Technical / 技术
+- Flutter 3.24.5 + Dart 3.5.4
+- Material Design 3 深色主题
+- WebSocket 通信协议
+
+---
+
 ## [1.2.0] - 2026-02-02
 
 ### Added / 新增
