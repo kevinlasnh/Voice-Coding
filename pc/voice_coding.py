@@ -579,13 +579,35 @@ def start_ngrok_tunnel():
         return None
 
     try:
-        # Connect to ngrok and create tunnel to HTTP server
-        tunnel = ngrok.connect(state.http_port, bind_tls=True)
-        public_url = tunnel.public_url
-        print(f"Ngrok tunnel established: {public_url}")
-        return tunnel, public_url
+        # Save and clear proxy environment variables (ngrok free tier doesn't support proxy)
+        # 保存并清除代理环境变量（ngrok 免费版不支持代理）
+        old_http_proxy = os.environ.pop('http_proxy', None)
+        old_https_proxy = os.environ.pop('https_proxy', None)
+        old_HTTP_PROXY = os.environ.pop('HTTP_PROXY', None)
+        old_HTTPS_PROXY = os.environ.pop('HTTPS_PROXY', None)
+
+        try:
+            # Connect to ngrok and create tunnel to HTTP server
+            tunnel = ngrok.connect(state.http_port, bind_tls=True)
+            public_url = tunnel.public_url
+            print(f"Ngrok tunnel established: {public_url}")
+            return tunnel, public_url
+        finally:
+            # Restore proxy environment variables
+            # 恢复代理环境变量
+            if old_http_proxy:
+                os.environ['http_proxy'] = old_http_proxy
+            if old_https_proxy:
+                os.environ['https_proxy'] = old_https_proxy
+            if old_HTTP_PROXY:
+                os.environ['HTTP_PROXY'] = old_HTTP_PROXY
+            if old_HTTPS_PROXY:
+                os.environ['HTTPS_PROXY'] = old_HTTPS_PROXY
+
     except Exception as e:
         print(f"Failed to start ngrok tunnel: {e}")
+        import traceback
+        traceback.print_exc()
         return None, None
 
 
