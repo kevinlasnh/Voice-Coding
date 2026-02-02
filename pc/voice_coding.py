@@ -266,6 +266,11 @@ def type_text(text: str):
 
 
 # ============================================================
+# Reserved for future features / 保留给未来功能
+# ============================================================
+
+
+# ============================================================
 # WebSocket Server / WebSocket 服务器
 # ============================================================
 async def handle_client(websocket):
@@ -273,18 +278,18 @@ async def handle_client(websocket):
     client_addr = websocket.remote_address
     state.connected_clients.add(websocket)
     print(f"Client connected: {client_addr}")
-    
+
     # Update tray icon when client connects
     if state.tray_icon:
         try:
             update_tray_icon(state.tray_icon)
         except Exception as e:
             print(f"Error updating tray icon: {e}")
-    
+
     try:
         # Get computer name for identification
         computer_name = socket.gethostname()
-        
+
         # Send welcome message with current sync state and computer name
         await websocket.send(json.dumps({
             "type": "connected",
@@ -292,12 +297,12 @@ async def handle_client(websocket):
             "sync_enabled": state.sync_enabled,
             "computer_name": computer_name
         }))
-        
+
         async for message in websocket:
             try:
                 data = json.loads(message)
                 msg_type = data.get("type", "")
-                
+
                 if msg_type == "text":
                     # Check if sync is enabled
                     if not state.sync_enabled:
@@ -306,7 +311,7 @@ async def handle_client(websocket):
                             "message": "Sync is disabled on PC"
                         }))
                         continue
-                    
+
                     text = data.get("content", "")
                     if text:
                         # Type the received text
@@ -316,14 +321,14 @@ async def handle_client(websocket):
                             "type": "ack",
                             "message": "Text received and typed"
                         }))
-                        
+
                 elif msg_type == "ping":
                     # Respond with pong and current sync state
                     await websocket.send(json.dumps({
                         "type": "pong",
                         "sync_enabled": state.sync_enabled
                     }))
-                    
+
             except json.JSONDecodeError:
                 # If not JSON, treat as plain text
                 if message.strip() and state.sync_enabled:
@@ -905,42 +910,27 @@ def update_tray_icon(icon):
         start_blink_timer(icon)
 
 
-def get_sync_text(item):
-    """Get dynamic menu text for sync toggle / 获取同步开关的动态菜单文本"""
-    return "✓ Enable Sync / 启用同步" if state.sync_enabled else "  Enable Sync / 启用同步"
-
-
 def create_menu():
     """Create the tray menu / 创建托盘菜单"""
     return pystray.Menu(
         item(
-            '📋 Show IP / 显示IP',
+            '📋 显示IP',
             show_ip_address
         ),
         pystray.Menu.SEPARATOR,
         item(
-            '🌐 Enable ngrok (PWA) / 启用ngrok',
-            toggle_ngrok,
-            checked=lambda item: state.ngrok_enabled
-        ),
-        item(
-            '✓ Enable Sync / 启用同步',
+            '🔄 同步',
             toggle_sync,
             checked=lambda item: state.sync_enabled
         ),
         item(
-            '🔒 Enable HTTPS (local) / 本地HTTPS',
-            toggle_https,
-            checked=lambda item: state.https_enabled
-        ),
-        item(
-            '🚀 Start with Windows / 开机启动',
+            '🚀 开机启动',
             toggle_startup,
             checked=lambda item: is_startup_enabled()
         ),
         pystray.Menu.SEPARATOR,
         item(
-            '❌ Quit / 退出',
+            '❌ 退出',
             quit_app
         )
     )
@@ -1002,9 +992,16 @@ def main():
 
 
 if __name__ == "__main__":
-    # Check single instance first
-    if not check_single_instance():
-        show_already_running_message()
-        sys.exit(0)
-    
+    # Development mode: run with --dev flag to skip single instance check
+    # 开发模式：使用 --dev 参数跳过单实例检查，方便快速迭代
+    DEV_MODE = "--dev" in sys.argv
+
+    if not DEV_MODE:
+        # Check single instance first (only in production)
+        if not check_single_instance():
+            show_already_running_message()
+            sys.exit(0)
+    else:
+        print("=== Running in DEV MODE (single instance check disabled) ===")
+
     main()

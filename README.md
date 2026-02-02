@@ -85,14 +85,25 @@ Voice-Coding/
 ├── pc/                     # PC 端源码
 │   ├── voice_coding.py     # 主程序
 │   ├── requirements.txt    # Python 依赖
-│   └── web/               # Web 前端
-│       ├── index.html     # 手机端页面
-│       ├── manifest.json  # PWA 配置
-│       └── sw.js          # Service Worker
-├── CHANGELOG.md          # 更新日志
-├── LICENSE               # 许可证
-└── README.md             # 本文件
+│   └── web/                # Web 前端
+│       ├── index.html      # 手机端页面
+│       ├── manifest.json   # PWA 配置
+│       └── sw.js           # Service Worker
+├── android/                # Android 原生客户端
+│   └── voice_coding/       # Flutter 项目
+│       ├── lib/main.dart   # 主程序
+│       └── pubspec.yaml    # Flutter 依赖
+├── CHANGELOG.md            # 更新日志
+├── LICENSE                 # 许可证
+└── README.md               # 本文件
 ```
+
+## 客户端选择
+
+| 客户端 | 优点 | 缺点 |
+|--------|------|------|
+| **Web 客户端** | 无需安装，浏览器直接访问 | 需要每次输入地址 |
+| **Android App** | 原生体验，一键启动 | 需要安装 APK |
 
 ## 开发
 

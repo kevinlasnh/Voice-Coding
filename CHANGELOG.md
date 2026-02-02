@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.6.0] - 2026-02-02
+
+### Added / 新增
+- 📱 **手动刷新连接** - Android 端新增"刷新连接"按钮，点击可手动重连
+- 🔧 **PC 热重启脚本** - 开发时可快速重启 PC 端应用
+
+### Changed / 变更
+- 🎨 **UI 重新设计**
+  - 状态栏分为左右两栏：连接状态 + 刷新按钮
+  - 输入框配色与状态栏统一（背景色 #3D3B37）
+  - 移除输入框边框，简洁统一
+- 🗑️ **移除焦点检测** - 移除不稳定的输入焦点检测功能
+- 🗑️ **移除 Toast 提示** - 简化交互，移除所有弹窗提示
+- 📋 **托盘菜单简化**
+  - 仅保留：显示IP、同步开关、开机启动、退出
+  - 使用动态文本显示开关状态（✓/无勾选）
+  - 移除 HTTPS 和 ngrok 选项
+
+### Removed / 移除
+- 移除 `uiautomation` 依赖
+- 移除 `psutil` 依赖
+- 移除焦点监控线程
+
+---
+
+## [1.5.0] - 2026-02-02
+
+### Added / 新增
+- ✨ **PC 端输入焦点检测** - 自动检测当前窗口是否有输入焦点
+- 📱 **Android 端焦点指示器** - Header 显示 🟢 可输入 / 🔴 无输入状态
+- 🔄 **WiFi 重连恢复** - 应用回到前台时自动尝试重连
+
+### Changed / 变更
+- 🎨 **UI 简化** - 合并 Header 和状态栏为一个框
+- ❌ **移除发送提示** - 发送成功后不再显示 Toast 提示
+- 📐 **间距统一** - 所有边缘间距统一为 16px
+
+### Fixed / 修复
+- 🐛 **无输入焦点保护** - PC 端无输入焦点时阻止发送并清空文本
+- 🐛 **输入框焦点边框** - 移除输入框聚焦时的橙色边框
+
+---
+
 ## [1.4.0] - 2026-02-02
 
 ### Changed / 变更
@@ -157,3 +200,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [ ] 历史记录功能
 - [ ] 剪贴板同步
 - [ ] macOS 支持
+
+### Added / 新增
+- 🛠️ **PC 端热重启脚本 Skill** - 新增脚本用于杀进程并重启 `voice_coding.py`，便于快速迭代
+
+### Changed / 变更
+- 🎯 **UI Automation 焦点检测** - 使用 Windows UI Automation API 精确检测输入焦点
+  - 正确识别 VS Code、Chrome、Edge 等现代应用的输入框
+  - 检测 Edit、Document、ComboBox 等控件类型
+  - 支持 ValuePattern/TextPattern 模式检测
+
+### Fixed / 修复
+- 🐛 **输入焦点检测失效** - 修复错误加载 `gui.dll` 导致焦点检测始终失败
+- 🚫 **移除焦点阻断** - 焦点状态仅用于 UI 提示，不再阻止文本发送

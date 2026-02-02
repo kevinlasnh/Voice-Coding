@@ -59,7 +59,7 @@ class MainPage extends StatefulWidget {
   State<MainPage> createState() => _MainPageState();
 }
 
-class _MainPageState extends State<MainPage> {
+class _MainPageState extends State<MainPage> with WidgetsBindingObserver {
   final TextEditingController _textController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
 
@@ -74,11 +74,13 @@ class _MainPageState extends State<MainPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _connect();
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _reconnectTimer?.cancel();
     _channel?.sink.close();
     _textController.dispose();
@@ -86,8 +88,22 @@ class _MainPageState extends State<MainPage> {
     super.dispose();
   }
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // When app returns to foreground, cancel pending reconnect and try immediately
+    if (state == AppLifecycleState.resumed) {
+      _reconnectTimer?.cancel();
+      if (_status != ConnectionStatus.connected) {
+        _connect();
+      }
+    }
+  }
+
   void _connect() {
     setState(() => _status = ConnectionStatus.connecting);
+
+    // Close old connection if exists
+    _channel?.sink.close();
 
     try {
       _channel = WebSocketChannel.connect(
@@ -124,7 +140,6 @@ class _MainPageState extends State<MainPage> {
           _deviceName = data['computer_name'] ?? '';
         });
       } else if (type == 'ack') {
-        _showToast('✓ 已发送');
         _textController.clear();
       } else if (type == 'sync_state' || type == 'pong') {
         setState(() {
@@ -154,16 +169,7 @@ class _MainPageState extends State<MainPage> {
 
   void _sendText() {
     final text = _textController.text.trim();
-    if (text.isEmpty) {
-      _showToast('请输入内容');
-      return;
-    }
-    if (_status != ConnectionStatus.connected) {
-      _showToast('未连接到电脑');
-      return;
-    }
-    if (!_syncEnabled) {
-      _showToast('电脑端同步已关闭');
+    if (text.isEmpty || _status != ConnectionStatus.connected || !_syncEnabled) {
       return;
     }
 
@@ -173,19 +179,8 @@ class _MainPageState extends State<MainPage> {
         'content': text,
       }));
     } catch (e) {
-      _showToast('发送出错');
+      // Silently fail
     }
-  }
-
-  void _showToast(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: const Color(0xFF3D3B37),
-        behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 1500),
-      ),
-    );
   }
 
   @override
@@ -198,14 +193,10 @@ class _MainPageState extends State<MainPage> {
             children: [
               _buildHeader(),
               const SizedBox(height: 16),
-              _buildStatusCard(),
-              const SizedBox(height: 16),
-              _buildSyncAlert(),
-              const SizedBox(height: 16),
               Expanded(
                 child: _buildInputArea(),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 16),
               _buildEnterHint(),
             ],
           ),
@@ -215,107 +206,88 @@ class _MainPageState extends State<MainPage> {
   }
 
   Widget _buildHeader() {
+    // 连接状态
+    Color connectionDotColor;
+    String connectionText;
+    final bool showSyncWarning = _status == ConnectionStatus.connected && !_syncEnabled;
+
+    if (_status == ConnectionStatus.connected) {
+      connectionDotColor = showSyncWarning ? const Color(0xFFE5A84B) : const Color(0xFF5CB87A);
+      connectionText = showSyncWarning ? '同步关闭' : '已连接';
+    } else {
+      connectionDotColor = const Color(0xFFE85C4A);
+      connectionText = '未连接';
+    }
+
     return Row(
       children: [
-        Container(
-          width: 36,
-          height: 36,
-          decoration: BoxDecoration(
-            color: const Color(0xFFD97757),
-            borderRadius: BorderRadius.circular(10),
-          ),
-          child: const Center(
-            child: Text(
-              'V',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w800,
-                fontSize: 18,
-              ),
+        // 左侧：连接状态
+        Expanded(
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: const Color(0xFF3D3B37),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Row(
+              children: [
+                _buildStatusDot(connectionDotColor),
+                const SizedBox(width: 8),
+                Text(
+                  connectionText,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: connectionDotColor,
+                  ),
+                ),
+              ],
             ),
           ),
         ),
         const SizedBox(width: 12),
+        // 右侧：刷新按钮
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text(
-                'Voice Coding',
-                style: TextStyle(
-                  fontSize: 17,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFFECECEC),
-                ),
+          child: GestureDetector(
+            onTap: _refreshConnection,
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: const Color(0xFF3D3B37),
+                borderRadius: BorderRadius.circular(12),
               ),
-              Text(
-                '语音输入助手',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: Color(0xFF6B6B6B),
-                ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.refresh,
+                    color: Colors.white,
+                    size: 18,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '刷新连接',
+                    style: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
       ],
     );
   }
 
-  Widget _buildStatusCard() {
-    Color dotColor;
-    String statusText;
-
-    switch (_status) {
-      case ConnectionStatus.connected:
-        dotColor = const Color(0xFF5CB87A);
-        statusText = _syncEnabled ? '已连接' : '已连接 · 同步关闭';
-        break;
-      case ConnectionStatus.connecting:
-        dotColor = const Color(0xFFE5A84B);
-        statusText = '正在连接...';
-        break;
-      default:
-        dotColor = const Color(0xFFE85C4A);
-        statusText = '未连接';
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF3D3B37),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        children: [
-          _buildStatusDot(dotColor),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  statusText,
-                  style: TextStyle(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    color: dotColor,
-                  ),
-                ),
-                if (_deviceName.isNotEmpty)
-                  Text(
-                    '设备: $_deviceName',
-                    style: const TextStyle(
-                      fontSize: 12,
-                      color: Color(0xFF6B6B6B),
-                    ),
-                  ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
+  void _refreshConnection() {
+    // 关闭现有连接
+    _reconnectTimer?.cancel();
+    _channel?.sink.close();
+    
+    // 重新连接
+    _connect();
   }
 
   Widget _buildStatusDot(Color color) {
@@ -337,34 +309,11 @@ class _MainPageState extends State<MainPage> {
     );
   }
 
-  Widget _buildSyncAlert() {
-    if (_status == ConnectionStatus.connected && !_syncEnabled) {
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: const Color(0xFFE85C4A).withOpacity(0.15),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: const Center(
-          child: Text(
-            '⚠️ 电脑端同步已关闭，无法发送',
-            style: TextStyle(
-              fontSize: 13,
-              color: Color(0xFFE85C4A),
-            ),
-          ),
-        ),
-      );
-    }
-    return const SizedBox.shrink();
-  }
-
   Widget _buildInputArea() {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF2D2B28),
+        color: const Color(0xFF3D3B37),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF4A4844)),
       ),
       padding: const EdgeInsets.all(14),
       child: TextField(
@@ -374,12 +323,18 @@ class _MainPageState extends State<MainPage> {
         decoration: const InputDecoration(
           hintText: '输入文字或使用语音...',
           border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
+          filled: false,
+          contentPadding: EdgeInsets.zero,
+          isDense: true,
           hintStyle: TextStyle(color: Color(0xFF6B6B6B)),
         ),
         style: const TextStyle(
           fontSize: 16,
           color: Color(0xFFECECEC),
         ),
+        cursorColor: const Color(0xFFD97757),
         textInputAction: TextInputAction.send,
         onSubmitted: (_) => _sendText(),
       ),
