@@ -14,6 +14,8 @@ import threading
 import winreg
 import json
 import ctypes
+import ssl
+import shutil
 from typing import Optional
 from pathlib import Path
 from http.server import HTTPServer, SimpleHTTPRequestHandler
@@ -71,6 +73,7 @@ APP_NAME = "VoiceCoding"
 APP_VERSION = "1.0.0"
 WS_PORT = 9527      # WebSocket port
 HTTP_PORT = 9528    # HTTP port for web UI
+HTTPS_PORT = 9529   # HTTPS port for web UI (PWA install requires HTTPS)
 STARTUP_REGISTRY_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 # Disable pyautogui failsafe (moving to corner won't stop it)
@@ -91,9 +94,12 @@ class AppState:
         self.tray_icon = None
         self.ws_port = WS_PORT
         self.http_port = HTTP_PORT
+        self.https_port = HTTPS_PORT
+        self.https_enabled = True  # Enable HTTPS by default for PWA install support
         self.connected_clients = set()
         self.blink_state = False  # For icon blinking / 图标闪烁状态
         self.blink_timer: Optional[threading.Timer] = None
+        self.https_server = None  # HTTPS server instance for shutdown
         
 state = AppState()
 
@@ -356,6 +362,179 @@ def run_server():
 
 
 # ============================================================
+# HTTPS Certificate Management / HTTPS 证书管理
+# ============================================================
+def get_cert_dir() -> Path:
+    """Get the certificate directory / 获取证书目录路径"""
+    if getattr(sys, 'frozen', False):
+        # Running as compiled exe - use AppData/Local
+        app_data = Path(os.environ.get('LOCALAPPDATA', Path.home() / '.local'))
+        cert_dir = app_data / 'VoiceCoding'
+    else:
+        # Running as script - use script directory
+        cert_dir = Path(__file__).parent / 'certs'
+
+    cert_dir.mkdir(parents=True, exist_ok=True)
+    return cert_dir
+
+
+def generate_self_signed_cert():
+    """
+    Generate a self-signed certificate for HTTPS.
+    生成自签名证书用于 HTTPS。
+    """
+    cert_dir = get_cert_dir()
+    cert_file = cert_dir / 'server.pem'
+    key_file = cert_dir / 'server.key'
+
+    # If certificate already exists and is valid, return
+    if cert_file.exists() and key_file.exists():
+        return str(cert_file), str(key_file)
+
+    print("Generating self-signed certificate...")
+
+    try:
+        # Try using cryptography module
+        from cryptography import x509
+        from cryptography.x509.oid import NameOID
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import rsa
+        from cryptography.hazmat.primitives import serialization
+        import datetime
+
+        # Generate private key
+        key = rsa.generate_private_key(
+            public_exponent=65537,
+            key_size=2048,
+        )
+
+        # Generate certificate
+        subject = issuer = x509.Name([
+            x509.NameAttribute(NameOID.COUNTRY_NAME, "CN"),
+            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Beijing"),
+            x509.NameAttribute(NameOID.LOCALITY_NAME, "Beijing"),
+            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "VoiceCoding"),
+            x509.NameAttribute(NameOID.COMMON_NAME, "localhost"),
+        ])
+
+        cert = x509.CertificateBuilder().subject_name(
+            subject
+        ).issuer_name(
+            issuer
+        ).public_key(
+            key.public_key()
+        ).serial_number(
+            x509.random_serial_number()
+        ).not_valid_before(
+            datetime.datetime.utcnow()
+        ).not_valid_after(
+            datetime.datetime.utcnow() + datetime.timedelta(days=3650)  # 10 years
+        ).add_extension(
+            x509.SubjectAlternativeName([
+                x509.DNSName("localhost"),
+                x509.IPAddress(socket.inet_aton("127.0.0.1")),
+                x509.IPAddress(socket.inet_aton("192.168.137.1")),
+                x509.IPAddress(socket.inet_aton("192.168.0.1")),
+                x509.IPAddress(socket.inet_aton("192.168.1.1")),
+                x509.IPAddress(socket.inet_aton("10.0.0.1")),
+            ]),
+            critical=False,
+        ).sign(key, hashes.SHA256())
+
+        # Write certificate
+        with open(cert_file, "wb") as f:
+            f.write(cert.public_bytes(serialization.Encoding.PEM))
+
+        # Write key
+        with open(key_file, "wb") as f:
+            f.write(key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.TraditionalOpenSSL,
+                encryption_algorithm=serialization.NoEncryption()
+            ))
+
+        print(f"Certificate generated: {cert_file}")
+        return str(cert_file), str(key_file)
+
+    except ImportError:
+        # Fallback: use OpenSSL command if available
+        print("cryptography module not found, trying OpenSSL...")
+        try:
+            import subprocess
+
+            # Generate a combined PEM file (cert + key)
+            combined_cert = cert_dir / 'server_combined.pem'
+
+            # OpenSSL command to generate self-signed certificate
+            cmd = [
+                'openssl', 'req', '-x509', '-newkey', 'rsa:2048',
+                '-keyout', str(key_file), '-out', str(cert_file),
+                '-days', '3650', '-nodes',
+                '-subj', '/C=CN/ST=Beijing/L=Beijing/O=VoiceCoding/CN=localhost'
+            ]
+
+            result = subprocess.run(cmd, capture_output=True, text=True,
+                                    creationflags=subprocess.CREATE_NO_WINDOW)
+
+            if result.returncode == 0:
+                # Combine cert and key for Python ssl module
+                with open(combined_cert, 'wb') as combined:
+                    with open(cert_file, 'rb') as f:
+                        combined.write(f.read())
+                    with open(key_file, 'rb') as f:
+                        combined.write(f.read())
+
+                print(f"Certificate generated using OpenSSL: {combined_cert}")
+                return str(combined_cert), None
+            else:
+                print(f"OpenSSL failed: {result.stderr}")
+                return None, None
+
+        except FileNotFoundError:
+            print("OpenSSL not found. Please install cryptography package:")
+            print("  pip install cryptography")
+            return None, None
+
+
+def run_https_server():
+    """Run HTTPS server for web UI / 运行HTTPS服务器提供网页界面"""
+    cert_file, key_file = generate_self_signed_cert()
+
+    if cert_file is None:
+        print("Failed to generate certificate. HTTPS server not started.")
+        print("PWA installation requires HTTPS. Install: pip install cryptography")
+        return
+
+    try:
+        httpd = HTTPServer(('0.0.0.0', state.https_port), WebHandler)
+
+        # Create SSL context
+        if key_file:
+            # Separate cert and key files
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(certfile=cert_file, keyfile=key_file)
+        else:
+            # Combined PEM file
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain(certfile=cert_file)
+
+        # Wrap the socket with SSL
+        httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
+
+        state.https_server = httpd
+
+        print(f"HTTPS server started at https://{HOTSPOT_IP}:{state.https_port}")
+        print(f"  Certificate: {cert_file}")
+        print(f"  Note: You'll need to accept the security warning in your browser")
+
+        while state.running:
+            httpd.handle_request()
+
+    except Exception as e:
+        print(f"HTTPS server error: {e}")
+
+
+# ============================================================
 # HTTP Server for Web UI / HTTP服务器提供网页界面
 # ============================================================
 def get_web_dir() -> Path:
@@ -490,18 +669,45 @@ def toggle_startup(icon, menu_item):
     set_startup_enabled(not current)
 
 
+def toggle_https(icon, menu_item):
+    """Toggle HTTPS on/off / 切换HTTPS开关"""
+    state.https_enabled = not state.https_enabled
+
+    if state.https_enabled:
+        # Start HTTPS server
+        https_thread = threading.Thread(target=run_https_server, daemon=True)
+        https_thread.start()
+    else:
+        # Shutdown HTTPS server
+        if state.https_server:
+            try:
+                state.https_server.shutdown()
+                state.https_server = None
+            except:
+                pass
+
+    # Update notification with new URL
+    show_ip_address(icon, menu_item)
+
+
 def show_ip_address(icon, menu_item):
     """Show IP address notification and copy to clipboard / 显示IP地址并复制"""
-    web_url = f"http://{HOTSPOT_IP}:{state.http_port}"
-    
+    if state.https_enabled:
+        web_url = f"https://{HOTSPOT_IP}:{state.https_port}"
+        http_url = f"http://{HOTSPOT_IP}:{state.http_port}"
+        message = f"📱 手机连接电脑热点后访问:\n{web_url}\n(HTTP: {http_url})\n\n注意: 首次访问需接受安全警告\n(已复制到剪贴板)"
+    else:
+        web_url = f"http://{HOTSPOT_IP}:{state.http_port}"
+        message = f"📱 手机连接电脑热点后访问:\n{web_url}\n(已复制到剪贴板)"
+
     # Copy to clipboard
     try:
         import pyperclip
         pyperclip.copy(web_url)
     except:
         pass
-    
-    icon.notify(f"📱 手机连接电脑热点后访问:\n{web_url}\n(已复制到剪贴板)", "Voice Coding")
+
+    icon.notify(message, "Voice Coding")
 
 
 def quit_app(icon, menu_item):
@@ -578,6 +784,11 @@ def create_menu():
             checked=lambda item: state.sync_enabled
         ),
         item(
+            '🔒 Enable HTTPS (PWA) / 启用HTTPS',
+            toggle_https,
+            checked=lambda item: state.https_enabled
+        ),
+        item(
             '🚀 Start with Windows / 开机启动',
             toggle_startup,
             checked=lambda item: is_startup_enabled()
@@ -623,19 +834,24 @@ def run_tray():
 def main():
     """Main entry point / 主入口"""
     global HOTSPOT_IP
-    
+
     # Detect hotspot IP at startup
     HOTSPOT_IP = get_hotspot_ip()
     print(f"Detected hotspot IP: {HOTSPOT_IP}")
-    
+
     # Start WebSocket server in background thread
     ws_thread = threading.Thread(target=run_server, daemon=True)
     ws_thread.start()
-    
+
     # Start HTTP server in background thread
     http_thread = threading.Thread(target=run_http_server, daemon=True)
     http_thread.start()
-    
+
+    # Start HTTPS server in background thread (for PWA install support)
+    if state.https_enabled:
+        https_thread = threading.Thread(target=run_https_server, daemon=True)
+        https_thread.start()
+
     # Run tray icon in main thread
     run_tray()
 

@@ -1,4 +1,5 @@
 {
+    "id": "voice-coding-v1",
     "name": "Voice Coding",
     "short_name": "VoiceCoding",
     "description": "手机输入，电脑显示 - Phone to PC text bridge",

@@ -499,7 +499,32 @@
         
         // 只在首次加载时设置一次
         setFixedHeight();
-        
+
+        // 注册 Service Worker (PWA 安装必需)
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('/sw.js')
+                    .then((reg) => console.log('Service Worker registered', reg))
+                    .catch((err) => console.log('Service Worker registration failed', err));
+            });
+        }
+
+        // 监听 beforeinstallprompt 事件（显示自定义安装按钮）
+        let deferredPrompt;
+        window.addEventListener('beforeinstallprompt', (e) => {
+            // 阻止默认的安装提示
+            e.preventDefault();
+            // 保存事件以便后续使用
+            deferredPrompt = e;
+            console.log('PWA install prompt available');
+        });
+
+        window.addEventListener('appinstalled', () => {
+            // 应用已安装
+            deferredPrompt = null;
+            console.log('PWA installed');
+        });
+
         window.onload = connect;
     </script>
 </body>
