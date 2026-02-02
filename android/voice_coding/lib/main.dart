@@ -91,7 +91,7 @@ class _MainPageState extends State<MainPage> {
 
     try {
       _channel = WebSocketChannel.connect(
-        'ws://$_serverIp:$_serverPort',
+        Uri.parse('ws://$_serverIp:$_serverPort'),
       );
 
       _channel!.stream.listen(
@@ -417,7 +417,6 @@ class _MainPageState extends State<MainPage> {
           child: OutlinedButton(
             onPressed: () {
               _textController.clear();
-              _textController.requestFocus();
             },
             style: OutlinedButton.styleFrom(
               foregroundColor: const Color(0xFFECECEC),
