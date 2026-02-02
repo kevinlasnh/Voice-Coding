@@ -74,3 +74,9 @@ android/bin/
 
 # Keep dist folder but ignore contents (will add releases manually)
 # dist/
+
+# Claude Code
+.claude/
+
+# Generated certificates
+pc/certs/
