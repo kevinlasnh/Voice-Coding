@@ -30,6 +30,15 @@ import pystray
 from pystray import MenuItem as item
 from PIL import Image, ImageDraw
 
+# Ngrok for HTTPS tunnel (PWA install support)
+try:
+    from pyngrok import ngrok
+    NGROK_AVAILABLE = True
+except ImportError:
+    NGROK_AVAILABLE = False
+    print("Warning: pyngrok not installed. ngrok feature will be disabled.")
+    print("Install with: pip install pyngrok")
+
 # ============================================================
 # Single Instance Check / 单实例检查
 # ============================================================
@@ -101,7 +110,12 @@ class AppState:
         self.blink_state = False  # For icon blinking / 图标闪烁状态
         self.blink_timer: Optional[threading.Timer] = None
         self.https_server = None  # HTTPS server instance for shutdown
-        
+        # Ngrok tunnel state / Ngrok 隧道状态
+        self.ngrok_enabled = False
+        self.ngrok_tunnel = None
+        self.ngrok_url = ""
+        self.use_ngrok = False  # Whether to use ngrok URL for display
+
 state = AppState()
 
 
@@ -557,6 +571,47 @@ def run_https_server():
 
 
 # ============================================================
+# Ngrok Tunnel / Ngrok 隧道
+# ============================================================
+def start_ngrok_tunnel():
+    """Start ngrok tunnel for HTTPS access / 启动 ngrok 隧道用于 HTTPS 访问"""
+    if not NGROK_AVAILABLE:
+        return None
+
+    try:
+        # Connect to ngrok and create tunnel to HTTP server
+        tunnel = ngrok.connect(state.http_port, bind_tls=True)
+        public_url = tunnel.public_url
+        print(f"Ngrok tunnel established: {public_url}")
+        return tunnel, public_url
+    except Exception as e:
+        print(f"Failed to start ngrok tunnel: {e}")
+        return None, None
+
+
+def stop_ngrok_tunnel():
+    """Stop ngrok tunnel / 停止 ngrok 隧道"""
+    if not NGROK_AVAILABLE:
+        return
+
+    try:
+        ngrok.kill()
+        print("Ngrok tunnel stopped")
+    except Exception as e:
+        print(f"Error stopping ngrok: {e}")
+
+
+def get_display_url():
+    """Get the URL to display to user / 获取显示给用户的 URL"""
+    if state.use_ngrok and state.ngrok_url:
+        return state.ngrok_url
+    elif state.https_enabled:
+        return f"https://{HOTSPOT_IP}:{state.https_port}"
+    else:
+        return f"http://{HOTSPOT_IP}:{state.http_port}"
+
+
+# ============================================================
 # HTTP Server for Web UI / HTTP服务器提供网页界面
 # ============================================================
 def get_web_dir() -> Path:
@@ -712,14 +767,50 @@ def toggle_https(icon, menu_item):
     show_ip_address(icon, menu_item)
 
 
+def toggle_ngrok(icon, menu_item):
+    """Toggle ngrok tunnel on/off / 切换ngrok隧道开关"""
+    if not NGROK_AVAILABLE:
+        icon.notify("ngrok 不可用！请安装: pip install pyngrok", "Voice Coding")
+        return
+
+    state.ngrok_enabled = not state.ngrok_enabled
+
+    if state.ngrok_enabled:
+        # Start ngrok tunnel
+        tunnel, url = start_ngrok_tunnel()
+        if tunnel and url:
+            state.ngrok_tunnel = tunnel
+            state.ngrok_url = url
+            state.use_ngrok = True
+            icon.notify(f"ngrok 隧道已启动\n{url}\n(已复制到剪贴板)", "Voice Coding")
+            # Copy to clipboard
+            try:
+                import pyperclip
+                pyperclip.copy(url)
+            except:
+                pass
+        else:
+            state.ngrok_enabled = False
+            icon.notify("ngrok 启动失败！请检查网络连接", "Voice Coding")
+    else:
+        # Stop ngrok tunnel
+        stop_ngrok_tunnel()
+        state.ngrok_tunnel = None
+        state.ngrok_url = ""
+        state.use_ngrok = False
+        icon.notify("ngrok 隧道已关闭", "Voice Coding")
+
+
 def show_ip_address(icon, menu_item):
     """Show IP address notification and copy to clipboard / 显示IP地址并复制"""
-    if state.https_enabled:
-        web_url = f"https://{HOTSPOT_IP}:{state.https_port}"
+    web_url = get_display_url()
+
+    if state.use_ngrok:
+        message = f"🌐 ngrok 隧道模式:\n{web_url}\n\n✅ 可直接安装 PWA！\n(已复制到剪贴板)"
+    elif state.https_enabled:
         http_url = f"http://{HOTSPOT_IP}:{state.http_port}"
-        message = f"📱 手机连接电脑热点后访问:\n{web_url}\n(HTTP: {http_url})\n\n注意: 首次访问需接受安全警告\n(已复制到剪贴板)"
+        message = f"📱 手机连接电脑热点后访问:\n{web_url}\n(HTTP: {http_url})\n\n⚠️ 自签名证书: 需接受警告\n且可能无法安装 PWA\n(已复制到剪贴板)"
     else:
-        web_url = f"http://{HOTSPOT_IP}:{state.http_port}"
         message = f"📱 手机连接电脑热点后访问:\n{web_url}\n(已复制到剪贴板)"
 
     # Copy to clipboard
@@ -735,6 +826,11 @@ def show_ip_address(icon, menu_item):
 def quit_app(icon, menu_item):
     """Quit the application / 退出应用"""
     state.running = False
+
+    # Stop ngrok tunnel if enabled
+    if state.ngrok_tunnel:
+        stop_ngrok_tunnel()
+
     stop_blink_timer()
     icon.stop()
 
@@ -801,12 +897,17 @@ def create_menu():
         ),
         pystray.Menu.SEPARATOR,
         item(
+            '🌐 Enable ngrok (PWA) / 启用ngrok',
+            toggle_ngrok,
+            checked=lambda item: state.ngrok_enabled
+        ),
+        item(
             '✓ Enable Sync / 启用同步',
             toggle_sync,
             checked=lambda item: state.sync_enabled
         ),
         item(
-            '🔒 Enable HTTPS (PWA) / 启用HTTPS',
+            '🔒 Enable HTTPS (local) / 本地HTTPS',
             toggle_https,
             checked=lambda item: state.https_enabled
         ),

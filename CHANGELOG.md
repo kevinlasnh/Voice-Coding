@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.0] - 2026-02-02
+
+### Added / 新增
+- 🌐 **ngrok 隧道支持** - 解决移动端 PWA 安装问题
+  - 使用 ngrok 提供的 HTTPS 隧道和有效 SSL 证书
+  - 托盘菜单新增 ngrok 开关选项
+  - 自动复制 ngrok URL 到剪贴板
+  - 显示更清晰的连接状态信息
+- 📦 新增 pyngrok 和 pyyaml 依赖
+
+### Fixed / 修复
+- 🐛 修复证书生成中 `ipaddress.IPv4Address()` 使用问题
+- 🐛 修复 HTTPS 服务器启动时的证书加载问题
+
+### Changed / 变更
+- 🔄 菜单项重新排序：ngrok 选项置顶以便快速访问
+- 📝 "Enable HTTPS" 改名为 "Enable HTTPS (local)" 以区分本地和 ngrok HTTPS
+
+### Technical / 技术
+- ngrok 隧道使用 `bind_tls=True` 强制 HTTPS 连接
+- 支持动态 URL 获取和显示
+
+---
+
 ## [1.1.0] - 2026-02-02
 
 ### Added / 新增
