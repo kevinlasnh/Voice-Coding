@@ -85,15 +85,21 @@ jobs:
           distribution: 'zulu'
           java-version: '17'
 
-      - name: Setup Gradle
-        uses: gradle/gradle-build-action@v3
-
       - name: Set up Flutter
         uses: subosito/flutter-action@v2
         with:
           channel: stable
           flutter-version: 3.27.0
           cache: true
+
+      - name: Verify Gradle wrapper config
+        working-directory: android/voice_coding
+        run: |
+          echo "=== Checking gradle-wrapper.properties ==="
+          cat android/gradle/wrapper/gradle-wrapper.properties
+          echo ""
+          echo "=== Root level gradle wrapper (if exists) ==="
+          cat gradle/wrapper/gradle-wrapper.properties 2>/dev/null || echo "Not found"
 
       - name: Get dependencies
         working-directory: android/voice_coding
