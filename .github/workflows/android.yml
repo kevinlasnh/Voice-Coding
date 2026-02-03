@@ -3,6 +3,8 @@ name: Build Android APK
 on:
   push:
     branches: [main]
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 jobs:
@@ -32,8 +34,8 @@ jobs:
         run: |
           VERSION=$(date +'%Y%m%d-%H%M')
           mv android/voice_coding/build/app/outputs/flutter-apk/app-release.apk \
-             android/voice_coding/build/app/outputs/flutter-apk/voice-coding-$VERSION.apk
-          echo "APK_VERSION=voice-coding-$VERSION" >> $GITHUB_ENV
+             android/voice_coding/build/app/outputs/flutter-apk/voice-coding.apk
+          echo "APK_VERSION=voice-coding.apk" >> $GITHUB_ENV
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
@@ -41,26 +43,10 @@ jobs:
           name: voice-coding-apk
           path: android/voice_coding/build/app/outputs/flutter-apk/*.apk
 
-      - name: Create Release
-        if: github.event_name == 'push'
+      - name: Upload to Release (on tag)
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: v1.0.${{ github.run_number }}
-          name: Release ${{ github.run_number }}
-          body: |
-            ## Voice Coding Android APK
-
-            自动构建的 Android APK 文件。
-
-            ## 安装方法
-            1. 下载 `voice-coding-*.apk` 文件
-            2. 传输到 Android 手机
-            3. 在手机上安装 APK
-            4. 确保手机和电脑在同一局域网
-
-            ## 使用说明
-            - 默认连接: 192.168.137.1:9527
-            - 打开应用后自动连接电脑
-            - 输入文字后点击"发送到电脑"
           files: android/voice_coding/build/app/outputs/flutter-apk/*.apk
-          token: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

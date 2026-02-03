@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
@@ -69,10 +70,13 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   String _deviceName = '';
   bool _syncEnabled = true;
   Timer? _reconnectTimer;
-  String _serverIp = '192.168.137.1';
-  final int _serverPort = 9527;
+  String _serverIp = '192.168.137.1';  // 默认 IP，会被 UDP 发现覆盖
+  int _serverPort = 9527;
   String _lastSentText = '';  // 保存上次发送的文本
   bool _showMenu = false;  // 是否显示下拉菜单
+  RawDatagramSocket? _udpSocket;  // UDP 监听套接字
+  StreamSubscription<RawSocketEvent>? _udpSubscription;  // UDP 订阅
+  static const int _udpBroadcastPort = 9530;  // UDP 广播端口
 
   // 动画相关
   late AnimationController _menuAnimationController;
@@ -83,7 +87,6 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _connect();
 
     // 初始化菜单动画
     _menuAnimationController = AnimationController(
@@ -98,6 +101,12 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
       parent: _menuAnimationController,
       curve: Curves.easeOut,
     );
+
+    // 启动 UDP 发现监听
+    _startUdpDiscovery();
+
+    // 开始连接（可能在 UDP 发现后会被重新触发）
+    _connect();
   }
 
   @override
@@ -108,6 +117,8 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     _textController.dispose();
     _scrollController.dispose();
     _menuAnimationController.dispose();
+    _udpSubscription?.cancel();
+    _udpSocket?.close();
     super.dispose();
   }
 
@@ -190,22 +201,76 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     });
   }
 
+  /// 启动 UDP 发现监听
+  /// 监听 PC 端的 UDP 广播，自动获取服务器 IP 和端口
+  void _startUdpDiscovery() async {
+    try {
+      _udpSocket = await RawDatagramSocket.bind(InternetAddress.anyIPv4, _udpBroadcastPort);
+      _udpSocket!.broadcastEnabled = true;
+      _udpSocket!.multicastLoopback = true;
+
+      print('UDP 发现监听已启动，端口: $_udpBroadcastPort');
+
+      _udpSubscription = _udpSocket!.listen((RawSocketEvent event) {
+        if (event == RawSocketEvent.read) {
+          final datagram = _udpSocket!.receive();
+          if (datagram != null) {
+            final message = utf8.decode(datagram.data);
+            _handleUdpDiscovery(message, datagram.address.address);
+          }
+        }
+      });
+    } catch (e) {
+      print('UDP 发现启动失败: $e');
+      // 如果 UDP 启动失败，仍然可以使用默认 IP 连接
+    }
+  }
+
+  /// 处理 UDP 发现消息
+  void _handleUdpDiscovery(String message, String sourceIp) {
+    try {
+      final data = json.decode(message);
+      if (data['type'] == 'voice_coding_server') {
+        final discoveredIp = data['ip'] as String?;
+        final discoveredPort = data['port'] as int?;
+
+        if (discoveredIp != null && discoveredPort != null) {
+          // 检查是否与当前配置不同
+          if (_serverIp != discoveredIp || _serverPort != discoveredPort) {
+            print('UDP 发现服务器: $discoveredIp:$discoveredPort (来源: $sourceIp)');
+            setState(() {
+              _serverIp = discoveredIp;
+              _serverPort = discoveredPort;
+            });
+
+            // 如果当前未连接，立即尝试连接新发现的服务器
+            if (_status != ConnectionStatus.connected) {
+              _reconnectTimer?.cancel();
+              _connect();
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print('UDP 消息解析失败: $e');
+    }
+  }
+
   void _sendText() {
     final text = _textController.text.trim();
     if (text.isEmpty || _status != ConnectionStatus.connected || !_syncEnabled) {
       return;
     }
 
-    // 保存文本用于撤回
-    _lastSentText = text;
-
     try {
       _channel!.sink.add(json.encode({
         'type': 'text',
         'content': text,
       }));
+      // 保存文本用于撤回（发送成功后再保存）
+      _lastSentText = text;
     } catch (e) {
-      // Silently fail
+      // 发送失败，不保存文本
     }
   }
 

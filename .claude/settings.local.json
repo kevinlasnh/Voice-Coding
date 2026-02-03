@@ -42,7 +42,10 @@
       "Bash(echo:*)",
       "Bash(tree:*)",
       "Skill(changelog-automation)",
-      "Bash(\"C:\\\\Users\\\\kevinlasnh\\\\scoop\\\\apps\\\\flutter\\\\current\\\\bin\\\\flutter.bat\":*)"
+      "Bash(\"C:\\\\Users\\\\kevinlasnh\\\\scoop\\\\apps\\\\flutter\\\\current\\\\bin\\\\flutter.bat\":*)",
+      "Skill(pc-hot-restart)",
+      "Skill(find-skills)",
+      "Bash(npx skills find:*)"
     ]
   }
 }

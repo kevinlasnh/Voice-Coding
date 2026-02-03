@@ -14,16 +14,12 @@ import threading
 import winreg
 import json
 import ctypes
-import ssl
-import shutil
-import ipaddress
 import logging
 import subprocess
+import time
 from datetime import datetime
 from typing import Optional
 from pathlib import Path
-from http.server import HTTPServer, SimpleHTTPRequestHandler
-import mimetypes
 
 # PyQt5 for modern tray menu
 from PyQt5.QtWidgets import (
@@ -41,15 +37,6 @@ import pyautogui
 import pystray
 from pystray import MenuItem as item
 from PIL import Image, ImageDraw
-
-# Ngrok for HTTPS tunnel (PWA install support)
-try:
-    from pyngrok import ngrok
-    NGROK_AVAILABLE = True
-except ImportError:
-    NGROK_AVAILABLE = False
-    print("Warning: pyngrok not installed. ngrok feature will be disabled.")
-    print("Install with: pip install pyngrok")
 
 # ============================================================
 # Single Instance Check / 单实例检查
@@ -92,10 +79,8 @@ def show_already_running_message():
 # Configuration / 配置
 # ============================================================
 APP_NAME = "VoiceCoding"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.9.0"
 WS_PORT = 9527      # WebSocket port
-HTTP_PORT = 9528    # HTTP port for web UI
-HTTPS_PORT = 9529   # HTTPS port for web UI (PWA install requires HTTPS)
 STARTUP_REGISTRY_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
 
 # Disable pyautogui failsafe (moving to corner won't stop it)
@@ -115,18 +100,9 @@ class AppState:
         self.server = None
         self.tray_icon = None
         self.ws_port = WS_PORT
-        self.http_port = HTTP_PORT
-        self.https_port = HTTPS_PORT
-        self.https_enabled = True  # Enable HTTPS by default for PWA install support
         self.connected_clients = set()
         self.blink_state = False  # For icon blinking / 图标闪烁状态
         self.blink_timer: Optional[threading.Timer] = None
-        self.https_server = None  # HTTPS server instance for shutdown
-        # Ngrok tunnel state / Ngrok 隧道状态
-        self.ngrok_enabled = False
-        self.ngrok_tunnel = None
-        self.ngrok_url = ""
-        self.use_ngrok = False  # Whether to use ngrok URL for display
         self.log_file = None  # 日志文件路径
 
 state = AppState()
@@ -166,6 +142,9 @@ def setup_logging():
 # ============================================================
 # Windows Mobile Hotspot default IP / Windows 移动热点默认 IP
 DEFAULT_HOTSPOT_IP = "192.168.137.1"
+# UDP broadcast configuration / UDP 广播配置
+UDP_BROADCAST_PORT = 9530  # UDP 广播端口
+UDP_BROADCAST_INTERVAL = 2  # 广播间隔（秒）
 
 
 def get_hotspot_ip() -> str:
@@ -222,6 +201,53 @@ def get_all_local_ips() -> list:
         pass
     
     return ips
+
+
+# ============================================================
+# UDP Broadcast for Auto-Discovery / UDP 广播自动发现
+# ============================================================
+def start_udp_broadcast():
+    """
+    Start UDP broadcast to let mobile clients discover this server.
+    启动 UDP 广播让移动客户端自动发现此服务器。
+    """
+    broadcast_socket = None
+    try:
+        broadcast_socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        broadcast_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
+        broadcast_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+        # Broadcast message format / 广播消息格式
+        broadcast_data = json.dumps({
+            "type": "voice_coding_server",
+            "ip": HOTSPOT_IP,
+            "port": state.ws_port,
+            "name": socket.gethostname()
+        }).encode('utf-8')
+
+        logging.info(f"UDP 广播服务已启动，端口: {UDP_BROADCAST_PORT}")
+
+        while state.running:
+            try:
+                broadcast_socket.sendto(
+                    broadcast_data,
+                    ('<broadcast>', UDP_BROADCAST_PORT)
+                )
+                logging.debug(f"发送 UDP 广播: {HOTSPOT_IP}:{state.ws_port}")
+            except Exception as e:
+                logging.debug(f"UDP 广播发送失败: {e}")
+
+            # Wait before next broadcast / 等待下次广播
+            for _ in range(UDP_BROADCAST_INTERVAL * 10):
+                if not state.running:
+                    break
+                time.sleep(0.1)
+
+    except Exception as e:
+        logging.error(f"UDP 广播服务错误: {e}")
+    finally:
+        if broadcast_socket:
+            broadcast_socket.close()
 
 
 # Will be set at runtime / 运行时设置
@@ -421,304 +447,6 @@ def run_server():
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
     loop.run_until_complete(start_server())
-
-
-# ============================================================
-# HTTPS Certificate Management / HTTPS 证书管理
-# ============================================================
-def get_cert_dir() -> Path:
-    """Get the certificate directory / 获取证书目录路径"""
-    if getattr(sys, 'frozen', False):
-        # Running as compiled exe - use AppData/Local
-        app_data = Path(os.environ.get('LOCALAPPDATA', Path.home() / '.local'))
-        cert_dir = app_data / 'VoiceCoding'
-    else:
-        # Running as script - use script directory
-        cert_dir = Path(__file__).parent / 'certs'
-
-    cert_dir.mkdir(parents=True, exist_ok=True)
-    return cert_dir
-
-
-def generate_self_signed_cert():
-    """
-    Generate a self-signed certificate for HTTPS.
-    生成自签名证书用于 HTTPS。
-    """
-    cert_dir = get_cert_dir()
-    cert_file = cert_dir / 'server.pem'
-    key_file = cert_dir / 'server.key'
-    combined_cert = cert_dir / 'server_combined.pem'
-
-    # Check if any certificate file already exists
-    if combined_cert.exists():
-        return str(combined_cert), None
-    if cert_file.exists() and key_file.exists():
-        return str(cert_file), str(key_file)
-
-    print("Generating self-signed certificate...")
-
-    try:
-        # Try using cryptography module
-        from cryptography import x509
-        from cryptography.x509.oid import NameOID
-        from cryptography.hazmat.primitives import hashes
-        from cryptography.hazmat.primitives.asymmetric import rsa
-        from cryptography.hazmat.primitives import serialization
-        import datetime
-
-        # Generate private key
-        key = rsa.generate_private_key(
-            public_exponent=65537,
-            key_size=2048,
-        )
-
-        # Generate certificate
-        subject = issuer = x509.Name([
-            x509.NameAttribute(NameOID.COUNTRY_NAME, "CN"),
-            x509.NameAttribute(NameOID.STATE_OR_PROVINCE_NAME, "Beijing"),
-            x509.NameAttribute(NameOID.LOCALITY_NAME, "Beijing"),
-            x509.NameAttribute(NameOID.ORGANIZATION_NAME, "VoiceCoding"),
-            x509.NameAttribute(NameOID.COMMON_NAME, "localhost"),
-        ])
-
-        cert = x509.CertificateBuilder().subject_name(
-            subject
-        ).issuer_name(
-            issuer
-        ).public_key(
-            key.public_key()
-        ).serial_number(
-            x509.random_serial_number()
-        ).not_valid_before(
-            datetime.datetime.utcnow()
-        ).not_valid_after(
-            datetime.datetime.utcnow() + datetime.timedelta(days=3650)  # 10 years
-        ).add_extension(
-            x509.SubjectAlternativeName([
-                x509.DNSName("localhost"),
-                x509.IPAddress(ipaddress.IPv4Address("127.0.0.1")),
-                x509.IPAddress(ipaddress.IPv4Address("192.168.137.1")),
-                x509.IPAddress(ipaddress.IPv4Address("192.168.0.1")),
-                x509.IPAddress(ipaddress.IPv4Address("192.168.1.1")),
-                x509.IPAddress(ipaddress.IPv4Address("10.0.0.1")),
-            ]),
-            critical=False,
-        ).sign(key, hashes.SHA256())
-
-        # Write certificate
-        with open(cert_file, "wb") as f:
-            f.write(cert.public_bytes(serialization.Encoding.PEM))
-
-        # Write key
-        with open(key_file, "wb") as f:
-            f.write(key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption()
-            ))
-
-        # Create combined file for easier use
-        with open(combined_cert, "wb") as f:
-            f.write(cert.public_bytes(serialization.Encoding.PEM))
-            f.write(key.private_bytes(
-                encoding=serialization.Encoding.PEM,
-                format=serialization.PrivateFormat.TraditionalOpenSSL,
-                encryption_algorithm=serialization.NoEncryption()
-            ))
-
-        print(f"Certificate generated: {combined_cert}")
-        return str(combined_cert), None
-
-    except ImportError:
-        # Fallback: use OpenSSL command if available
-        print("cryptography module not found, trying OpenSSL...")
-        try:
-            import subprocess
-
-            # OpenSSL command to generate self-signed certificate (directly to combined file)
-            cmd = [
-                'openssl', 'req', '-x509', '-newkey', 'rsa:2048',
-                '-keyout', str(key_file), '-out', str(cert_file),
-                '-days', '3650', '-nodes',
-                '-subj', '/C=CN/ST=Beijing/L=Beijing/O=VoiceCoding/CN=localhost'
-            ]
-
-            result = subprocess.run(cmd, capture_output=True, text=True,
-                                    creationflags=subprocess.CREATE_NO_WINDOW)
-
-            if result.returncode == 0:
-                # Combine cert and key for Python ssl module
-                with open(combined_cert, 'wb') as combined:
-                    with open(cert_file, 'rb') as f:
-                        combined.write(f.read())
-                    with open(key_file, 'rb') as f:
-                        combined.write(f.read())
-
-                print(f"Certificate generated using OpenSSL: {combined_cert}")
-                return str(combined_cert), None
-            else:
-                print(f"OpenSSL failed: {result.stderr}")
-                return None, None
-
-        except FileNotFoundError:
-            print("OpenSSL not found. Please install cryptography package:")
-            print("  pip install cryptography")
-            return None, None
-
-    except Exception as e:
-        print(f"Error generating certificate: {e}")
-        import traceback
-        traceback.print_exc()
-        return None, None
-
-
-def run_https_server():
-    """Run HTTPS server for web UI / 运行HTTPS服务器提供网页界面"""
-    try:
-        cert_file, key_file = generate_self_signed_cert()
-
-        if cert_file is None:
-            print("Failed to generate certificate. HTTPS server not started.")
-            print("PWA installation requires HTTPS. Install: pip install cryptography")
-            return
-
-        httpd = HTTPServer(('0.0.0.0', state.https_port), WebHandler)
-
-        # Create SSL context
-        context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-        context.check_hostname = False
-        context.verify_mode = ssl.CERT_NONE
-
-        # Load certificate - handle both separate files and combined file
-        if key_file:
-            # Separate cert and key files
-            context.load_cert_chain(certfile=cert_file, keyfile=key_file)
-        else:
-            # Combined PEM file - load same file for both (works because it contains both)
-            # Actually, for combined file we just need certfile parameter
-            context.load_cert_chain(certfile=cert_file)
-
-        # Wrap the socket with SSL
-        httpd.socket = context.wrap_socket(httpd.socket, server_side=True)
-
-        state.https_server = httpd
-
-        print(f"HTTPS server started at https://{HOTSPOT_IP}:{state.https_port}")
-        print(f"  Certificate: {cert_file}")
-        print(f"  Note: You'll need to accept the security warning in your browser")
-
-        # Use serve_forever for more stable operation
-        httpd.serve_forever()
-
-    except Exception as e:
-        print(f"HTTPS server error: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-# ============================================================
-# Ngrok Tunnel / Ngrok 隧道
-# ============================================================
-def start_ngrok_tunnel():
-    """Start ngrok tunnel for HTTPS access / 启动 ngrok 隧道用于 HTTPS 访问"""
-    if not NGROK_AVAILABLE:
-        return None
-
-    try:
-        # Save and clear proxy environment variables (ngrok free tier doesn't support proxy)
-        # 保存并清除代理环境变量（ngrok 免费版不支持代理）
-        old_http_proxy = os.environ.pop('http_proxy', None)
-        old_https_proxy = os.environ.pop('https_proxy', None)
-        old_HTTP_PROXY = os.environ.pop('HTTP_PROXY', None)
-        old_HTTPS_PROXY = os.environ.pop('HTTPS_PROXY', None)
-
-        try:
-            # Connect to ngrok and create tunnel to HTTP server
-            tunnel = ngrok.connect(state.http_port, bind_tls=True)
-            public_url = tunnel.public_url
-            print(f"Ngrok tunnel established: {public_url}")
-            return tunnel, public_url
-        finally:
-            # Restore proxy environment variables
-            # 恢复代理环境变量
-            if old_http_proxy:
-                os.environ['http_proxy'] = old_http_proxy
-            if old_https_proxy:
-                os.environ['https_proxy'] = old_https_proxy
-            if old_HTTP_PROXY:
-                os.environ['HTTP_PROXY'] = old_HTTP_PROXY
-            if old_HTTPS_PROXY:
-                os.environ['HTTPS_PROXY'] = old_HTTPS_PROXY
-
-    except Exception as e:
-        print(f"Failed to start ngrok tunnel: {e}")
-        import traceback
-        traceback.print_exc()
-        return None, None
-
-
-def stop_ngrok_tunnel():
-    """Stop ngrok tunnel / 停止 ngrok 隧道"""
-    if not NGROK_AVAILABLE:
-        return
-
-    try:
-        ngrok.kill()
-        print("Ngrok tunnel stopped")
-    except Exception as e:
-        print(f"Error stopping ngrok: {e}")
-
-
-def get_display_url():
-    """Get the URL to display to user / 获取显示给用户的 URL"""
-    if state.use_ngrok and state.ngrok_url:
-        return state.ngrok_url
-    elif state.https_enabled:
-        return f"https://{HOTSPOT_IP}:{state.https_port}"
-    else:
-        return f"http://{HOTSPOT_IP}:{state.http_port}"
-
-
-# ============================================================
-# HTTP Server for Web UI / HTTP服务器提供网页界面
-# ============================================================
-def get_web_dir() -> Path:
-    """Get the web directory path / 获取网页目录路径"""
-    if getattr(sys, 'frozen', False):
-        # Running as compiled exe
-        return Path(sys._MEIPASS) / 'web'
-    else:
-        # Running as script
-        return Path(__file__).parent / 'web'
-
-
-class WebHandler(SimpleHTTPRequestHandler):
-    """Custom HTTP handler for serving web files / 自定义HTTP处理器"""
-    
-    def __init__(self, *args, **kwargs):
-        self.directory = str(get_web_dir())
-        super().__init__(*args, directory=self.directory, **kwargs)
-    
-    def log_message(self, format, *args):
-        # Suppress HTTP logs
-        pass
-    
-    def end_headers(self):
-        # Add CORS headers for WebSocket
-        self.send_header('Access-Control-Allow-Origin', '*')
-        super().end_headers()
-
-
-def run_http_server():
-    """Run HTTP server for web UI / 运行HTTP服务器提供网页界面"""
-    try:
-        server = HTTPServer(('0.0.0.0', state.http_port), WebHandler)
-        print(f"HTTP server started at http://{HOTSPOT_IP}:{state.http_port}")
-        while state.running:
-            server.handle_request()
-    except Exception as e:
-        print(f"HTTP server error: {e}")
 
 
 # ============================================================
@@ -1002,8 +730,6 @@ class ModernMenuWidget(QWidget):
     def quit_app(self):
         """退出应用"""
         state.running = False
-        if state.ngrok_tunnel:
-            stop_ngrok_tunnel()
         QApplication.quit()
 
     def close_with_animation(self):
@@ -1204,91 +930,9 @@ def toggle_startup(icon, menu_item):
     set_startup_enabled(not current)
 
 
-def toggle_https(icon, menu_item):
-    """Toggle HTTPS on/off / 切换HTTPS开关"""
-    state.https_enabled = not state.https_enabled
-
-    if state.https_enabled:
-        # Start HTTPS server
-        https_thread = threading.Thread(target=run_https_server, daemon=True)
-        https_thread.start()
-    else:
-        # Shutdown HTTPS server
-        if state.https_server:
-            try:
-                state.https_server.shutdown()
-                state.https_server = None
-            except:
-                pass
-
-    # Update notification with new URL
-    show_ip_address(icon, menu_item)
-
-
-def toggle_ngrok(icon, menu_item):
-    """Toggle ngrok tunnel on/off / 切换ngrok隧道开关"""
-    if not NGROK_AVAILABLE:
-        icon.notify("ngrok 不可用！请安装: pip install pyngrok", "Voice Coding")
-        return
-
-    state.ngrok_enabled = not state.ngrok_enabled
-
-    if state.ngrok_enabled:
-        # Start ngrok tunnel
-        tunnel, url = start_ngrok_tunnel()
-        if tunnel and url:
-            state.ngrok_tunnel = tunnel
-            state.ngrok_url = url
-            state.use_ngrok = True
-            icon.notify(f"ngrok 隧道已启动\n{url}\n(已复制到剪贴板)", "Voice Coding")
-            # Copy to clipboard
-            try:
-                import pyperclip
-                pyperclip.copy(url)
-            except:
-                pass
-        else:
-            state.ngrok_enabled = False
-            icon.notify("ngrok 启动失败！请检查网络连接", "Voice Coding")
-    else:
-        # Stop ngrok tunnel
-        stop_ngrok_tunnel()
-        state.ngrok_tunnel = None
-        state.ngrok_url = ""
-        state.use_ngrok = False
-        icon.notify("ngrok 隧道已关闭", "Voice Coding")
-
-
-def show_ip_address(icon, menu_item):
-    """Show IP address notification and copy to clipboard / 显示IP地址并复制"""
-    web_url = get_display_url()
-
-    if state.use_ngrok:
-        message = f"🌐 ngrok 隧道模式:\n{web_url}\n\n✅ 可直接安装 PWA！\n(已复制到剪贴板)"
-    elif state.https_enabled:
-        http_url = f"http://{HOTSPOT_IP}:{state.http_port}"
-        message = f"📱 手机连接电脑热点后访问:\n{web_url}\n(HTTP: {http_url})\n\n⚠️ 自签名证书: 需接受警告\n且可能无法安装 PWA\n(已复制到剪贴板)"
-    else:
-        message = f"📱 手机连接电脑热点后访问:\n{web_url}\n(已复制到剪贴板)"
-
-    # Copy to clipboard
-    try:
-        import pyperclip
-        pyperclip.copy(web_url)
-    except:
-        pass
-
-    icon.notify(message, "Voice Coding")
-
-
 def quit_app(icon, menu_item):
     """Quit the application / 退出应用"""
     state.running = False
-
-    # Stop ngrok tunnel if enabled
-    if state.ngrok_tunnel:
-        stop_ngrok_tunnel()
-
     stop_blink_timer()
     icon.stop()
 
@@ -1325,46 +969,20 @@ def start_blink_timer(icon):
 def update_tray_icon(icon):
     """Update tray icon based on state / 根据状态更新托盘图标"""
     stop_blink_timer()
-    
+
     if not state.sync_enabled:
         # Sync disabled - gray icon
         icon.icon = create_icon_paused()
-        icon.title = f"Voice Coding - Paused\nhttp://{HOTSPOT_IP}:{state.http_port}"
+        icon.title = f"Voice Coding - Paused\nws://{HOTSPOT_IP}:{state.ws_port}"
     elif len(state.connected_clients) > 0:
         # Has connected clients - green icon
         icon.icon = create_icon_connected()
         client_count = len(state.connected_clients)
-        icon.title = f"Voice Coding - {client_count} Connected\nhttp://{HOTSPOT_IP}:{state.http_port}"
+        icon.title = f"Voice Coding - {client_count} Connected\nws://{HOTSPOT_IP}:{state.ws_port}"
     else:
         # Waiting for connection - blue blinking icon
-        icon.title = f"Voice Coding - Waiting\nhttp://{HOTSPOT_IP}:{state.http_port}"
+        icon.title = f"Voice Coding - Waiting\nws://{HOTSPOT_IP}:{state.ws_port}"
         start_blink_timer(icon)
-
-
-def create_menu():
-    """Create the tray menu / 创建托盘菜单"""
-    return pystray.Menu(
-        item(
-            '📋 显示IP',
-            show_ip_address
-        ),
-        pystray.Menu.SEPARATOR,
-        item(
-            '🔄 同步',
-            toggle_sync,
-            checked=lambda item: state.sync_enabled
-        ),
-        item(
-            '🚀 开机启动',
-            toggle_startup,
-            checked=lambda item: is_startup_enabled()
-        ),
-        pystray.Menu.SEPARATOR,
-        item(
-            '❌ 退出',
-            quit_app
-        )
-    )
 
 
 def run_tray():
@@ -1441,14 +1059,9 @@ def main():
     ws_thread = threading.Thread(target=run_server, daemon=True)
     ws_thread.start()
 
-    # Start HTTP server in background thread
-    http_thread = threading.Thread(target=run_http_server, daemon=True)
-    http_thread.start()
-
-    # Start HTTPS server in background thread (for PWA install support)
-    if state.https_enabled:
-        https_thread = threading.Thread(target=run_https_server, daemon=True)
-        https_thread.start()
+    # Start UDP broadcast for auto-discovery
+    udp_thread = threading.Thread(target=start_udp_broadcast, daemon=True)
+    udp_thread.start()
 
     # Run tray icon with PyQt5 in main thread
     run_tray()

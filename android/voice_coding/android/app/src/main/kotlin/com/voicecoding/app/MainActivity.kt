@@ -1,4 +1,4 @@
-package com.example.voice_coding
+package com.voicecoding.app
 
 import io.flutter.embedding.android.FlutterActivity
 

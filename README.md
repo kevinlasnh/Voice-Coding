@@ -1,174 +1,211 @@
-# Voice Coding 语音编程
+# Voice Coding
 
-<p align="center">
-  <strong>手机输入，电脑打字</strong><br>
-  轻量级手机-电脑文本桥接工具
-</p>
+<div align="center">
 
-<p align="center">
-  <a href="#功能特性">功能</a> •
-  <a href="#快速开始">快速开始</a> •
-  <a href="#使用场景">场景</a> •
-  <a href="#开发">开发</a> •
-  <a href="#许可证">许可证</a>
-</p>
+**手机输入，电脑打字** 📱💻
+
+轻量级手机-电脑文本桥接工具
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voice-Coding)](https://github.com/kevinlasnh/Voice-Coding/releases/latest)
+
+[功能特性](#-功能特性) • [快速开始](#-快速开始) • [下载](#-下载) • [常见问题](#-常见问题)
+
+</div>
 
 ---
 
-## 功能特性
+## ✨ 功能特性
 
-| 功能 | 描述 |
+| 功能 | 说明 |
 |------|------|
-| 📱 **手机输入** | 在手机上打字或使用语音输入 |
+| 📡 **UDP 自动发现** | 手机自动发现并连接电脑，无需配置 IP |
+| 📱 **手机输入** | 支持文字输入、语音输入、撤回功能 |
 | 💻 **电脑输出** | 文本瞬间出现在电脑光标处 |
-| 🔗 **局域网直连** | 无需云端，无需服务器，端对端直连 |
-| 📦 **整包传输** | 文本整包发送，顺序保证 |
-| 🖥️ **系统托盘** | 静默后台运行，托盘图标控制 |
-| 🌐 **Web 客户端** | 手机端无需安装 App，浏览器直接访问 |
+| 🔗 **局域网直连** | 无需云端、无需服务器，端对端直连 |
+| 🖥️ **系统托盘** | Windows 11 Fluent Design 风格托盘菜单 |
+| 📋 **日志系统** | 完整的运行日志，方便排查问题 |
 | 🔄 **自动重连** | 断线自动重连，稳定可靠 |
-| ⚡ **开机自启** | 支持设置开机自动启动 |
+| 🚀 **开机自启** | 支持设置开机自动启动 |
 
-## 系统要求
+---
 
-### PC 端
-- Windows 10/11
+## 🚀 快速开始
+
+### 1️⃣ 下载安装
+
+从 [GitHub Releases](https://github.com/kevinlasnh/Voice-Coding/releases/latest) 下载：
+
+- **Windows 电脑端**: `voice-coding.exe`
+- **Android 手机端**: `voice-coding.apk`
+
+### 2️⃣ 启动电脑端
+
+1. 双击运行 `voice-coding.exe`
+2. 系统托盘出现 Voice Coding 图标 ✅
+3. 程序自动启动 UDP 广播服务
+
+### 3️⃣ 安装手机端
+
+1. 将 `voice-coding.apk` 传输到 Android 手机
+2. 安装 APK
+3. **开启 Windows 移动热点**
+4. 手机连接电脑热点
+5. 打开 Voice Coding App → **自动连接** ✅
+
+### 4️⃣ 开始使用
+
+1. 在电脑上点击输入位置（VS Code、Word、浏览器等）
+2. 在手机 App 中输入文字
+3. 按回车键发送
+4. 文字自动出现在电脑光标处！
+
+---
+
+## 📥 下载
+
+| 平台 | 文件 | 下载 |
+|------|------|------|
+| Windows | voice-coding.exe | [Releases](https://github.com/kevinlasnh/Voice-Coding/releases/latest) |
+| Android | voice-coding.apk | [Releases](https://github.com/kevinlasnh/Voice-Coding/releases/latest) |
+
+---
+
+## 📸 使用界面
+
+### 电脑端托盘菜单
+
+- 📡 同步输入 - 开关同步功能
+- 🚀 开机自启 - 设置开机启动
+- 📋 打开日志 - 查看运行日志
+- 🚪 退出应用 - 关闭程序
+
+### 手机端功能
+
+- 自动连接电脑（UDP 发现）
+- 文字输入 + 回车发送
+- 撤回上次输入
+- 刷新连接
+
+---
+
+## 🎯 使用场景
+
+| 场景 | 说明 |
+|------|------|
+| 🎤 **语音编程** | 用手机语音输入写代码注释、文档 |
+| 📝 **长文输入** | 躺在沙发上用手机给电脑打字 |
+| 🌍 **多语言输入** | 利用手机更好的输入法输入各种语言 |
+| 🎮 **游戏聊天** | 全屏游戏时用手机打字 |
+
+---
+
+## 🔧 系统要求
+
+### 电脑端
+- Windows 10/11 (64位)
 - 无需安装额外运行时
 
 ### 手机端
-- 任意现代浏览器（推荐 Edge/Chrome）
-- 与电脑在同一局域网/热点下
+- Android 5.0+ (API 21+)
+- 与电脑在同一移动热点下
 
-## 快速开始
+---
 
-### 1️⃣ 启动电脑端
-
-1. 运行 `VoiceCoding.exe`
-2. 系统托盘出现图标，表示服务已启动
-3. 右键托盘图标可查看本机 IP 地址
-
-### 2️⃣ 手机连接
-
-1. 确保手机和电脑在**同一网络**下（WiFi 或手机热点）
-2. 手机浏览器访问：`http://<电脑IP>:9527`
-   - 例如：`http://192.168.1.100:9527`
-3. 页面显示"已连接"即可使用
-
-### 3️⃣ 开始使用
-
-1. 在电脑上点击你想输入文字的位置（如 VS Code、Word、浏览器等）
-2. 在手机网页输入框中输入文字（支持语音输入）
-3. 点击"发送到电脑"
-4. 文字自动出现在电脑光标处！
-
-## 使用场景
-
-- 🎤 **语音编程** - 用手机语音输入写代码注释
-- 📝 **长文输入** - 躺在沙发上用手机给电脑打字
-- 🌍 **多语言输入** - 利用手机更好的输入法输入各种语言
-- 🎮 **游戏聊天** - 全屏游戏时用手机打字
-
-## 托盘菜单
-
-右键点击系统托盘图标：
-
-| 菜单项 | 功能 |
-|--------|------|
-| **IP 地址** | 显示本机 IP，点击可复制 |
-| **启用/禁用同步** | 临时开关文本同步功能 |
-| **开机自启** | 设置是否开机自动启动 |
-| **退出** | 关闭程序 |
-
-## 项目结构
+## 📁 项目结构
 
 ```
 Voice-Coding/
-├── pc/                     # PC 端源码
+├── pc/                     # PC 端源码 (Python)
 │   ├── voice_coding.py     # 主程序
-│   ├── requirements.txt    # Python 依赖
-│   └── web/                # Web 前端
-│       ├── index.html      # 手机端页面
-│       ├── manifest.json   # PWA 配置
-│       └── sw.js           # Service Worker
-├── android/                # Android 原生客户端
-│   └── voice_coding/       # Flutter 项目
+│   └── requirements.txt    # Python 依赖
+├── android/                # Android 端 (Flutter)
+│   └── voice_coding/
 │       ├── lib/main.dart   # 主程序
 │       └── pubspec.yaml    # Flutter 依赖
+├── .github/workflows/      # GitHub Actions
+│   ├── android.yml         # APK 构建流程
+│   ├── pc.yml              # EXE 构建流程
+│   └── release.yml         # Release 发布流程
 ├── CHANGELOG.md            # 更新日志
-├── LICENSE                 # 许可证
+├── LICENSE                 # MIT 许可证
 └── README.md               # 本文件
 ```
 
-## 客户端选择
+---
 
-| 客户端 | 优点 | 缺点 |
-|--------|------|------|
-| **Web 客户端** | 无需安装，浏览器直接访问 | 需要每次输入地址 |
-| **Android App** | 原生体验，一键启动 | 需要安装 APK |
-
-## 开发
+## 🛠️ 开发
 
 ### 环境准备
 
 ```bash
 # 克隆仓库
 git clone https://github.com/kevinlasnh/Voice-Coding.git
-cd Voice-Coding/pc
+cd Voice-Coding
 
-# 安装依赖
+# PC 端
+cd pc
 pip install -r requirements.txt
+python voice_coding.py --dev
 
-# 运行开发版本
-python voice_coding.py
+# Android 端
+cd android/voice_coding
+flutter pub get
+flutter run
 ```
 
 ### 打包发布
 
 ```bash
-# 使用 PyInstaller 打包
-pyinstaller --onefile --noconsole --name VoiceCoding --add-data "web;web" voice_coding.py
+# PC 端打包
+cd pc
+pyinstaller --onefile --windowed --name=VoiceCoding voice_coding.py
+
+# Android 端打包
+cd android/voice_coding
+flutter build apk --release
 ```
 
-打包后的可执行文件位于 `dist/VoiceCoding.exe`
+---
 
-### 技术栈
+## ❓ 常见问题
 
-- **后端**: Python 3.10+, WebSocket, HTTP Server
-- **前端**: HTML5, CSS3, JavaScript (原生)
-- **打包**: PyInstaller
-- **依赖**: websockets, pyautogui, pystray, Pillow
+### Q: 手机无法自动连接电脑？
 
-## 常见问题
+1. 确保电脑和手机在**同一移动热点**下
+2. 检查电脑防火墙是否允许 UDP 端口 9530
+3. 点击手机端"刷新连接"手动重试
 
-### Q: 手机无法连接电脑？
+### Q: 如何查看日志？
 
-1. 确保手机和电脑在同一网络
-2. 检查电脑防火墙是否阻止了 9527 端口
-3. 尝试关闭电脑防火墙测试
+右键托盘图标 → 点击"打开日志" → 自动打开当天日志文件
+
+日志位置：`%APPDATA%\VoiceCoding\logs\`
 
 ### Q: 文字输入到了错误的位置？
 
-确保在点击"发送"前，电脑上的光标已经在正确的输入位置。
+确保在按回车发送前，电脑上的光标已经在正确的输入位置。
 
-### Q: 如何使用手机热点连接？
+---
 
-1. 开启手机热点
-2. 电脑连接手机热点
-3. 访问热点网关地址（通常是 `192.168.43.1:9527`）
-
-## 更新日志
+## 📝 更新日志
 
 查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新历史。
 
-## 贡献
+---
+
+## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
 
-## 许可证
+---
+
+## 📄 许可证
 
 [MIT License](LICENSE)
 
 ---
 
-<p align="center">
+<div align="center">
   Made with ❤️ by <a href="https://github.com/kevinlasnh">kevinlasnh</a>
-</p>
+</div>

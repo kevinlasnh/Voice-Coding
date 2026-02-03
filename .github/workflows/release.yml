@@ -1,0 +1,70 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+
+      - name: Extract changelog for this release
+        id: changelog
+        run: |
+          # 从 CHANGELOG.md 提取当前版本的更新日志
+          awk '/## \['${{ env.VERSION }}']/{flag=1} flag{print} /^---$/{if(flag)exit}' CHANGELOG.md > release_notes.md
+
+          # 添加下载说明
+          cat >> release_notes.md << 'EOF'
+
+          ### 📥 下载说明
+
+          | 文件 | 说明 | 下载 |
+          |------|------|------|
+          | `voice-coding-*.apk` | Android 安装包 | 手机下载安装 |
+          | `voice-coding-*.exe` | Windows 电脑端 | 电脑下载运行 |
+
+          ### 🚀 快速开始
+
+          1. **电脑端**：下载 EXE 文件，直接运行
+          2. **手机端**：下载 APK 文件，安装到手机
+          3. **连接**：
+             - 开启 Windows 移动热点
+             - 手机连接电脑热点
+             - 打开 APK，自动连接电脑 ✅
+
+          ### 📋 系统要求
+
+          - **Windows**：Windows 10/11 (64位)
+          - **Android**：Android 5.0+ (API 21+)
+
+          EOF
+
+          # 转义为 JSON 格式供 GitHub API 使用
+          echo "notes<<EOF" >> $GITHUB_OUTPUT
+          cat release_notes.md >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Voice Coding ${{ env.VERSION }}
+          body: ${{ steps.changelog.outputs.notes }}
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
