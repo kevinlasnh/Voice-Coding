@@ -17,6 +17,17 @@
 3. Git commit
 4. Git push
 
+### PC 端代码修改后必须热重启
+
+**修改 PC 端代码 (`pc/voice_coding.py`) 后，必须强制进行热重启操作！**
+
+**热重启命令：**
+```powershell
+powershell -ExecutionPolicy Bypass -File ".claude/skills/pc-hot-restart/restart_pc_dev.ps1"
+```
+
+**原因**：PC 端是 Python 长期运行的进程，修改代码后不会自动生效，必须手动重启。
+
 ---
 
 ## 项目架构
