@@ -11,6 +11,7 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    needs: [build-android, build-windows]  # 等待构建完成
 
     steps:
       - name: Checkout code
@@ -19,45 +20,46 @@ jobs:
           fetch-depth: 0
 
       - name: Get version from tag
-        id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+        run: |
+          VERSION=${GITHUB_REF#refs/tags/}
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
 
       - name: Extract changelog for this release
         id: changelog
         run: |
           # 从 CHANGELOG.md 提取当前版本的更新日志
-          awk '/## \['${{ env.VERSION }}']/{flag=1} flag{print} /^---$/{if(flag)exit}' CHANGELOG.md > release_notes.md
+          VERSION="$VERSION"
+          awk "/## \\[$VERSION\\]/{flag=1} flag{print} /^---$/{if(flag)exit}" CHANGELOG.md > release_notes.md
 
           # 添加下载说明
           cat >> release_notes.md << 'EOF'
 
           ### 📥 下载说明
 
-          | 文件 | 说明 | 下载 |
-          |------|------|------|
-          | `voice-coding-*.apk` | Android 安装包 | 手机下载安装 |
-          | `voice-coding-*.exe` | Windows 电脑端 | 电脑下载运行 |
+          | 文件 | 说明 |
+          |------|------|
+          | `voice-coding.apk` | Android 安装包 |
+          | `voice-coding.exe` | Windows 电脑端 |
 
           ### 🚀 快速开始
 
           1. **电脑端**：下载 EXE 文件，直接运行
           2. **手机端**：下载 APK 文件，安装到手机
-          3. **连接**：
-             - 开启 Windows 移动热点
-             - 手机连接电脑热点
-             - 打开 APK，自动连接电脑 ✅
+          3. **连接**：开启 Windows 移动热点 → 手机连接 → 打开 APK ✅
 
           ### 📋 系统要求
 
-          - **Windows**：Windows 10/11 (64位)
-          - **Android**：Android 5.0+ (API 21+)
+          - Windows 10/11 (64位)
+          - Android 5.0+ (API 21+)
 
           EOF
 
-          # 转义为 JSON 格式供 GitHub API 使用
-          echo "notes<<EOF" >> $GITHUB_OUTPUT
-          cat release_notes.md >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+          # 设置输出
+          {
+            echo 'notes<<EOF' >> $GITHUB_OUTPUT
+            cat release_notes.md >> $GITHUB_OUTPUT
+            echo 'EOF' >> $GITHUB_OUTPUT
+          }
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -66,5 +68,69 @@ jobs:
           body: ${{ steps.changelog.outputs.notes }}
           draft: false
           prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-android:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.24.5
+          cache: true
+
+      - name: Get dependencies
+        working-directory: android/voice_coding
+        run: flutter pub get
+
+      - name: Build APK (Release)
+        working-directory: android/voice_coding
+        run: flutter build apk --release
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: android/voice_coding/build/app/outputs/flutter-apk/app-release.apk
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  build-windows:
+    name: Build Windows EXE
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+
+      - name: Install dependencies
+        working-directory: pc
+        run: pip install -r requirements.txt
+
+      - name: Build EXE with PyInstaller
+        working-directory: pc
+        run: |
+          pyinstaller --onefile --windowed --name=VoiceCoding voice_coding.py
+
+      - name: Rename EXE
+        shell: powershell
+        run: |
+          Copy-Item "pc\dist\VoiceCoding.exe" -Destination "pc\dist\voice-coding.exe"
+
+      - name: Upload to Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: pc/dist/voice-coding.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -45,7 +45,8 @@
       "Bash(\"C:\\\\Users\\\\kevinlasnh\\\\scoop\\\\apps\\\\flutter\\\\current\\\\bin\\\\flutter.bat\":*)",
       "Skill(pc-hot-restart)",
       "Skill(find-skills)",
-      "Bash(npx skills find:*)"
+      "Bash(npx skills find:*)",
+      "Bash(git push:*)"
     ]
   }
 }
