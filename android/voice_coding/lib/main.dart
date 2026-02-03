@@ -75,6 +75,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   String _lastSentText = '';  // 保存上次发送的文本
   bool _showMenu = false;  // 是否显示下拉菜单
   bool _shadowModeEnabled = false;  // 影随模式开关
+  Timer? _shadowModeDebounce;  // 影随模式防抖定时器
   RawDatagramSocket? _udpSocket;  // UDP 监听套接字
   StreamSubscription<RawSocketEvent>? _udpSubscription;  // UDP 订阅
   static const int _udpBroadcastPort = 9530;  // UDP 广播端口
@@ -114,6 +115,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _reconnectTimer?.cancel();
+    _shadowModeDebounce?.cancel();  // 清理影随模式防抖定时器
     _channel?.sink.close();
     _textController.dispose();
     _scrollController.dispose();
@@ -273,6 +275,26 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     } catch (e) {
       // 发送失败，不保存文本
     }
+  }
+
+  /// 影随模式：实时同步文字变化到 PC 端
+  void _onTextChanged(String text) {
+    if (!_shadowModeEnabled || _status != ConnectionStatus.connected || !_syncEnabled) {
+      return;
+    }
+
+    // 防抖：避免频繁发送，等待 100ms 后再发送
+    _shadowModeDebounce?.cancel();
+    _shadowModeDebounce = Timer(const Duration(milliseconds: 100), () {
+      try {
+        _channel!.sink.add(json.encode({
+          'type': 'shadow_sync',
+          'content': text,
+        }));
+      } catch (e) {
+        print('影随模式同步失败: $e');
+      }
+    });
   }
 
   @override
@@ -676,6 +698,7 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
         cursorColor: const Color(0xFFD97757),
         textInputAction: TextInputAction.send,
         onSubmitted: (_) => _sendText(),
+        onChanged: _onTextChanged,  // 影随模式监听
       ),
     );
   }

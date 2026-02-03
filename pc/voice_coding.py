@@ -390,6 +390,16 @@ async def handle_client(websocket):
                             "message": "Text received and typed"
                         }))
 
+                elif msg_type == "shadow_sync":
+                    # 影随模式：实时同步文字变化
+                    if not state.sync_enabled:
+                        continue
+
+                    text = data.get("content", "")
+                    if text:
+                        # 实时输入到光标位置（不清空输入）
+                        type_text(text)
+
                 elif msg_type == "ping":
                     # Respond with pong and current sync state
                     await websocket.send(json.dumps({
