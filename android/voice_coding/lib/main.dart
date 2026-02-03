@@ -559,36 +559,38 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
-    return Container(
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: const Color(0xFF3D3B37),
-        borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Icon(icon, color: Colors.white, size: 18),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w600,
-              color: Colors.white,
+    return GestureDetector(
+      // 阻止事件冒泡到外层遮罩
+      behavior: HitTestBehavior.opaque,
+      onTap: () => onChanged(!value),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFF3D3B37),
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.3),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
             ),
-          ),
-          const Spacer(),
-          // 滑动开关
-          GestureDetector(
-            onTap: () => onChanged(!value),
-            child: AnimatedContainer(
+          ],
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: Colors.white, size: 18),
+            const SizedBox(width: 8),
+            Text(
+              text,
+              style: const TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.white,
+              ),
+            ),
+            const Spacer(),
+            // 滑动开关
+            AnimatedContainer(
               duration: const Duration(milliseconds: 200),
               width: 48,
               height: 28,
@@ -619,8 +621,8 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
                 ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
