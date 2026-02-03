@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1] - 2026-02-03
+
+### 🐛 修复问题
+
+- **GitHub Actions 构建修复** - 修复 Android APK 构建失败问题
+  - 移除 gradle.properties 中的本地代理配置
+  - 修正 Gradle wrapper 配置
+
+---
+
 ## [2.0.0] - 2026-02-03
 
 > **重大更新** - 架构简化，专注 PC + Android 双端体验

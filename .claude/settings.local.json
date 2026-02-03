@@ -47,7 +47,8 @@
       "Skill(find-skills)",
       "Bash(npx skills find:*)",
       "Bash(git push:*)",
-      "Bash(git tag:*)"
+      "Bash(git tag:*)",
+      "Bash(gh release view:*)"
     ]
   }
 }
