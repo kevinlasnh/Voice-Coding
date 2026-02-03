@@ -23,7 +23,6 @@
 
 ### PC 端 (Python)
 - **主程序**: `pc/voice_coding.py`
-- **Web 前端**: `pc/web/index.html`
 - **依赖**: `pc/requirements.txt`
 
 ### Android 端 (Flutter)
@@ -42,7 +41,7 @@ powershell -ExecutionPolicy Bypass -File ".claude/skills/pc-hot-restart/restart_
 ### PC 端打包
 ```bash
 cd pc
-pyinstaller --onefile --windowed --name=VoiceCoding --add-data="web;web" voice_coding.py
+pyinstaller --onefile --windowed --name=VoiceCoding voice_coding.py
 ```
 
 ### Android 端运行
@@ -73,6 +72,57 @@ flutter run
 - 正文: 16px
 - 状态文字: 15px, fontWeight 600
 - 提示文字: 13px
+
+---
+
+## CI/CD 规则 (GitHub Actions)
+
+### ⚠️ Android Gradle 构建配置
+
+**问题根源**: GitHub Actions runner 网络环境特殊，配置不当会导致 Gradle 下载失败。
+
+**必须遵守的规则**:
+
+1. **gradle.properties 不能包含本地代理配置**
+   ```gradle
+   # ❌ 错误 - 会导致 CI 构建失败
+   systemProp.https.proxyHost=127.0.0.1
+   systemProp.https.proxyPort=7890
+   ```
+
+2. **gradle-wrapper.properties 使用官方源**
+   ```properties
+   # ✅ 正确
+   distributionUrl=https\://services.gradle.org/distributions/gradle-8.12-all.zip
+   ```
+
+3. **Gradle wrapper 文件必须提交到仓库**
+   - `android/voice_coding/gradlew`
+   - `android/voice_coding/gradlew.bat`
+   - `android/voice_coding/gradle/wrapper/gradle-wrapper.jar`
+   - `android/voice_coding/gradle/wrapper/gradle-wrapper.properties`
+
+4. **GitHub Actions workflow 配置**
+   ```yaml
+   - name: Set up Java
+     uses: actions/setup-java@v4
+     with:
+       distribution: 'zulu'
+       java-version: '17'
+
+   - name: Set up Flutter
+     uses: subosito/flutter-action@v2
+     with:
+       flutter-version: 3.27.0
+       cache: true
+
+   - name: Build APK
+     run: flutter build apk --release
+   ```
+
+**常见错误**: `java.net.ConnectException: Connection refused`
+- 原因: gradle.properties 配置了本地代理
+- 解决: 删除代理配置或使用 `gradle.properties` 模板文件
 
 ---
 
