@@ -36,6 +36,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - 解决：PyInstaller 添加 `--icon` 和 `--add-data` 参数
   - 新增 PNG 转 ICO 步骤
 
+- **Android 网络权限修复** 🔥
+  - 问题：AndroidManifest.xml 缺少网络权限声明
+  - 表现：APK 无法连接 PC 端
+  - 解决：添加 INTERNET、ACCESS_NETWORK_STATE、ACCESS_WIFI_STATE 权限
+
 ### 🎯 PC 端托盘图标优化
 
 - **圆形图标**：托盘图标改为圆形外轮廓，与微信等主流应用风格一致
