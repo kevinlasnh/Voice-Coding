@@ -2,13 +2,13 @@
 
 > 最后更新：2026-02-04
 
-## 🎉 v2.3.1 发布中
+## 🎉 v2.3.1 已发布！
 
 **最新 Release**: [v2.3.1](https://github.com/kevinlasnh/Voicing/releases/tag/v2.3.1)
 
 包含文件：
-- ✅ `voicing.apk` - Android 安装包（含自定义图标 + 网络权限修复）
-- ✅ `voicing.exe` - Windows 电脑端（含托盘图标 + EXE 图标）
+- ✅ `voicing.apk` - Android 安装包（网络权限已修复，可正常连接）
+- ✅ `voicing.exe` - Windows 电脑端（EXE图标 + 托盘图标正常显示）
 
 ---
 

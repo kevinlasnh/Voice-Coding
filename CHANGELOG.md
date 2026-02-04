@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.3.1] - 2026-02-04
+
+### 🔥 关键修复
+
+- **Android 网络权限修复**
+  - 问题：APK 无法连接 PC 端
+  - 原因：AndroidManifest.xml 缺少网络权限声明
+  - 解决：添加 INTERNET、ACCESS_NETWORK_STATE、ACCESS_WIFI_STATE 权限
+
+- **Windows EXE 图标修复**
+  - 问题：EXE 文件图标显示为默认图标，托盘图标显示为纯蓝色
+  - 原因：PyInstaller 打包时未包含图标资源
+  - 解决：添加 `--icon` 和 `--add-data` 参数
+
+### 🔧 技术改进
+
+- **ICO 文件优化**
+  - 创建多尺寸 ICO 文件（256/128/64/48/32/16px）
+  - 确保 Windows 各种显示场景下图标清晰
+
+- **CI/CD 更新**
+  - GitHub Actions release.yml 添加图标打包步骤
+  - 添加 PNG 转 ICO 自动化流程
+
+---
+
 ## [2.3.0] - 2026-02-04
 
 ### 🎨 品牌更新
