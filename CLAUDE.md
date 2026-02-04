@@ -39,10 +39,12 @@ Error resolving plugin [id: 'dev.flutter.flutter-plugin-loader', version: '1.0.0
 ```
 这里的 `25.0.1` 是 Java 版本号，说明使用了不兼容的 Java 版本。
 
-**解决方案**：在 `android/voice_coding/android/gradle.properties` 中指定 Java 路径：
+**解决方案**：在 `android/voice_coding/android/local.properties` 中指定 Java 路径（此文件不提交到 Git）：
 ```properties
 org.gradle.java.home=C:\\dev\\java21\\jdk-21.0.2
 ```
+
+**注意**：不要在 `gradle.properties` 中设置本地路径，否则会导致 CI 构建失败。
 
 **本机 Java 路径**：
 - Java 21: `C:\dev\java21\jdk-21.0.2`
