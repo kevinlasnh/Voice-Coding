@@ -2,7 +2,9 @@
 
 <div align="center">
 
-**和 AI 吵架，嘴比手快** 🎤💬
+<img src="android/voice_coding/assets/icons/icon_1024.png" width="128" alt="Voicing App Icon">
+
+**和 AI 吵架，嘴比手快**
 
 用手机语音输入，让文字直接出现在电脑光标处
 

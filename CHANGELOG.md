@@ -48,6 +48,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `CLAUDE.md` 新增 Flutter 构建 Java 版本规则
 - 记录本机 Java 21 路径：`C:\dev\java21\jdk-21.0.2`
 - 记录 Flutter 启动命令
+- **README 添加应用图标** - 在标题区域展示 128px 应用图标
 
 ---
 
