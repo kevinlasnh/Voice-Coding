@@ -29,8 +29,6 @@
 
 手机语音输入法（讯飞、搜狗、百度）的识别准确率已经很高了，为什么不用起来？
 
----
-
 ## 🚀 快速开始
 
 ### 1️⃣ 下载安装
@@ -61,16 +59,12 @@
 3. 按回车键发送
 4. 文字自动出现在电脑光标处！
 
----
-
 ## 📥 下载
 
 | 平台 | 文件 | 下载 |
 |------|------|------|
 | Windows | voicing.exe | [Releases](https://github.com/kevinlasnh/Voicing/releases/latest) |
 | Android | voicing.apk | [Releases](https://github.com/kevinlasnh/Voicing/releases/latest) |
-
----
 
 ## 📱 手机端使用
 
@@ -84,8 +78,6 @@
 - 刷新连接 - 重新连接电脑
 - 撤回上次输入 - 恢复刚才发送的文字
 - 自动发送 - 开关自动发送模式
-
----
 
 ## 💻 电脑端使用
 
@@ -102,8 +94,6 @@
 - 🟢 常亮 = 已连接
 - ⚫ 灰色 = 同步已关闭
 
----
-
 ## 🎯 使用场景
 
 | 场景 | 说明 |
@@ -111,8 +101,6 @@
 | 🤖 **和 AI 对话** | Claude、ChatGPT、Copilot...用嘴比用手快 |
 | 💻 **写代码注释** | 语音输入比打字轻松多了 |
 | 📝 **长文输入** | 躺在沙发上用手机给电脑打字 |
-
----
 
 ## 🔧 系统要求
 
@@ -123,8 +111,6 @@
 ### 手机端
 - Android 5.0+ (API 21+)
 - 与电脑在同一移动热点下
-
----
 
 ## 📁 项目结构
 
@@ -142,8 +128,6 @@ Voicing/
 ├── LICENSE                 # MIT 许可证
 └── README.md               # 本文件
 ```
-
----
 
 ## 🛠️ 开发
 
@@ -177,8 +161,6 @@ cd android/voice_coding
 flutter build apk --release
 ```
 
----
-
 ## ❓ 常见问题
 
 ### Q: 手机无法自动连接电脑？
@@ -197,25 +179,17 @@ flutter build apk --release
 
 确保在按回车发送前，电脑上的光标已经在正确的输入位置。
 
----
-
 ## 📝 更新日志
 
 查看 [CHANGELOG.md](CHANGELOG.md) 了解版本更新历史。
-
----
 
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
 
----
-
 ## 📄 许可证
 
 [MIT License](LICENSE)
-
----
 
 <div align="center">
   Made with ❤️ by <a href="https://github.com/kevinlasnh">kevinlasnh</a>
