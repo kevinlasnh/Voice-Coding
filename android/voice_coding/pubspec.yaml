@@ -1,5 +1,5 @@
-name: voice_coding
-description: "Phone to PC text bridge"
+name: voicing
+description: "Voicing - Phone to PC voice bridge"
 publish_to: 'none'
 version: 1.0.0+1
 
@@ -11,11 +11,23 @@ dependencies:
     sdk: flutter
   web_socket_channel: ^2.4.0
   cupertino_icons: ^1.0.8
+  shared_preferences: ^2.2.2
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
   flutter_lints: ^4.0.0
+  flutter_launcher_icons: ^0.14.3
+
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/icons/icon_1024.png"
+  adaptive_icon_background: "#1A1A2E"
+  adaptive_icon_foreground: "assets/icons/icon_1024.png"
+  min_sdk_android: 21
 
 flutter:
   uses-material-design: true
+  assets:
+    - assets/icons/

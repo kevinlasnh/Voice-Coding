@@ -38,8 +38,8 @@ jobs:
 
           | 文件 | 说明 |
           |------|------|
-          | `voice-coding.apk` | Android 安装包 |
-          | `voice-coding.exe` | Windows 电脑端 |
+          | `voicing.apk` | Android 安装包 |
+          | `voicing.exe` | Windows 电脑端 |
 
           ### 🚀 快速开始
 
@@ -64,7 +64,7 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          name: Voice Coding ${{ env.VERSION }}
+          name: Voicing ${{ env.VERSION }}
           body: ${{ steps.changelog.outputs.notes }}
           draft: false
           prerelease: false
@@ -141,11 +141,11 @@ jobs:
       - name: Rename EXE
         shell: powershell
         run: |
-          Copy-Item "pc\dist\VoiceCoding.exe" -Destination "pc\dist\voice-coding.exe"
+          Copy-Item "pc\dist\VoiceCoding.exe" -Destination "pc\dist\voicing.exe"
 
       - name: Upload to Release
         uses: softprops/action-gh-release@v1
         with:
-          files: pc/dist/voice-coding.exe
+          files: pc/dist/voicing.exe
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

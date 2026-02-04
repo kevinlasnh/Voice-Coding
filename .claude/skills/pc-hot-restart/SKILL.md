@@ -1,6 +1,6 @@
 ---
 name: pc_hot_restart
-description: Restart Voice Coding PC dev process by killing the old instance and starting a new one.
+description: Restart Voicing PC dev process by killing the old instance and starting a new one.
 ---
 
 # Skill: PC 端热重启 (Hot Restart)
@@ -27,6 +27,6 @@ description: Restart Voice Coding PC dev process by killing the old instance and
    - 终端显示 `Restarted dev app: ...`
 
 ## ✅ 验证
-- 任务栏托盘出现 Voice Coding 图标
+- 任务栏托盘出现 Voicing 图标
 - 手机端/Android 端重新连接正常
 - 控制台无报错

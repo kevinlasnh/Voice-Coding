@@ -1,10 +1,10 @@
-# Voice Coding
+# Voicing
 
 <div align="center">
 
-**手机输入，电脑打字** 📱💻
+**手机语音输入，电脑光标输出** 📱💻
 
-轻量级手机-电脑文本桥接工具
+将手机变成电脑的无线语音输入设备
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voice-Coding)](https://github.com/kevinlasnh/Voice-Coding/releases/latest)
@@ -21,6 +21,7 @@
 |------|------|
 | 📡 **UDP 自动发现** | 手机自动发现并连接电脑，无需配置 IP |
 | 📱 **手机输入** | 支持文字输入、语音输入、撤回功能 |
+| 🎯 **自动发送** | 语音输入实时同步到电脑，下划线消失自动发送 |
 | 💻 **电脑输出** | 文本瞬间出现在电脑光标处 |
 | 🔗 **局域网直连** | 无需云端、无需服务器，端对端直连 |
 | 🖥️ **系统托盘** | Windows 11 Fluent Design 风格托盘菜单 |
@@ -36,22 +37,22 @@
 
 从 [GitHub Releases](https://github.com/kevinlasnh/Voice-Coding/releases/latest) 下载：
 
-- **Windows 电脑端**: `voice-coding.exe`
-- **Android 手机端**: `voice-coding.apk`
+- **Windows 电脑端**: `voicing.exe`
+- **Android 手机端**: `voicing.apk`
 
 ### 2️⃣ 启动电脑端
 
-1. 双击运行 `voice-coding.exe`
-2. 系统托盘出现 Voice Coding 图标 ✅
+1. 双击运行 `voicing.exe`
+2. 系统托盘出现 Voicing 图标 ✅
 3. 程序自动启动 UDP 广播服务
 
 ### 3️⃣ 安装手机端
 
-1. 将 `voice-coding.apk` 传输到 Android 手机
+1. 将 `voicing.apk` 传输到 Android 手机
 2. 安装 APK
 3. **开启 Windows 移动热点**
 4. 手机连接电脑热点
-5. 打开 Voice Coding App → **自动连接** ✅
+5. 打开 Voicing App → **自动连接** ✅
 
 ### 4️⃣ 开始使用
 
@@ -66,8 +67,8 @@
 
 | 平台 | 文件 | 下载 |
 |------|------|------|
-| Windows | voice-coding.exe | [Releases](https://github.com/kevinlasnh/Voice-Coding/releases/latest) |
-| Android | voice-coding.apk | [Releases](https://github.com/kevinlasnh/Voice-Coding/releases/latest) |
+| Windows | voicing.exe | [Releases](https://github.com/kevinlasnh/Voice-Coding/releases/latest) |
+| Android | voicing.apk | [Releases](https://github.com/kevinlasnh/Voice-Coding/releases/latest) |
 
 ---
 
@@ -84,6 +85,7 @@
 
 - 自动连接电脑（UDP 发现）
 - 文字输入 + 回车发送
+- 🎯 **自动发送** - 语音输入实时同步
 - 撤回上次输入
 - 刷新连接
 
@@ -115,18 +117,15 @@
 ## 📁 项目结构
 
 ```
-Voice-Coding/
+Voicing/
 ├── pc/                     # PC 端源码 (Python)
 │   ├── voice_coding.py     # 主程序
 │   └── requirements.txt    # Python 依赖
-├── android/                # Android 端 (Flutter)
-│   └── voice_coding/
-│       ├── lib/main.dart   # 主程序
-│       └── pubspec.yaml    # Flutter 依赖
-├── .github/workflows/      # GitHub Actions
-│   ├── android.yml         # APK 构建流程
-│   ├── pc.yml              # EXE 构建流程
-│   └── release.yml         # Release 发布流程
+├── android/voice_coding/   # Android 端 (Flutter)
+│   ├── lib/main.dart       # 主程序
+│   └── pubspec.yaml        # Flutter 依赖
+├── .github/workflows/      # GitHub Actions CI/CD
+│   └── release.yml         # 自动构建发布
 ├── CHANGELOG.md            # 更新日志
 ├── LICENSE                 # MIT 许可证
 └── README.md               # 本文件
@@ -180,7 +179,7 @@ flutter build apk --release
 
 右键托盘图标 → 点击"打开日志" → 自动打开当天日志文件
 
-日志位置：`%APPDATA%\VoiceCoding\logs\`
+日志位置：`%APPDATA%\Voicing\logs\`
 
 ### Q: 文字输入到了错误的位置？
 

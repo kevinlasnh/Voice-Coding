@@ -1,6 +1,6 @@
-# Contributing to Voice Coding / 贡献指南
+# Contributing to Voicing / 贡献指南
 
-感谢您有兴趣为 Voice Coding 做出贡献！
+感谢您有兴趣为 Voicing 做出贡献！
 
 ## 如何贡献
 

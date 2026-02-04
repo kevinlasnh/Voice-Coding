@@ -1,4 +1,4 @@
-# Voice-Coding 开发规范
+# Voicing 开发规范
 
 ## ⚠️ 强制规则
 
@@ -27,6 +27,31 @@ powershell -ExecutionPolicy Bypass -File ".claude/skills/pc-hot-restart/restart_
 ```
 
 **原因**：PC 端是 Python 长期运行的进程，修改代码后不会自动生效，必须手动重启。
+
+### Flutter 构建必须使用 Java 17/21
+
+**问题**：系统 JAVA_HOME 可能指向不兼容的 Java 版本（如 Java 25），导致 Gradle 构建失败。
+
+**错误特征**：
+```
+Error resolving plugin [id: 'dev.flutter.flutter-plugin-loader', version: '1.0.0']
+> 25.0.1
+```
+这里的 `25.0.1` 是 Java 版本号，说明使用了不兼容的 Java 版本。
+
+**解决方案**：在 `android/voice_coding/android/gradle.properties` 中指定 Java 路径：
+```properties
+org.gradle.java.home=C:\\dev\\java21\\jdk-21.0.2
+```
+
+**本机 Java 路径**：
+- Java 21: `C:\dev\java21\jdk-21.0.2`
+
+**Flutter 启动命令（PowerShell）**：
+```powershell
+cd C:\Zero\Doc\Cloud\GitHub\Voice-Coding\android\voice_coding
+C:\dev\flutter\bin\flutter.bat run -d 0B221FDD40005P
+```
 
 ---
 
@@ -137,14 +162,21 @@ flutter run
 
 ---
 
-## 当前开发状态 (2026-02-03)
+## 当前开发状态 (2026-02-04)
 
 ### ✅ 已完成功能
+
+#### PC 端托盘图标优化 (v2.3.0) - 最新
+- **圆形图标**：256px 高清，圆形外轮廓
+- **图标缓存**：预缓存 normal/dim/paused 三种状态，闪烁均匀
+- **悬停提示**：鼠标悬停显示 "Voicing"
+- **只响应右键**：左键不触发菜单
+- **菜单预加载**：首次打开快速
 
 #### PC 端托盘菜单 (v1.8.0)
 - **Windows 11 Fluent Design 风格** - 完整实现
 - **悬停高亮效果** - 使用 `paintEvent` + `WA_TransparentForMouseEvents` 解决
-- **日志系统** - 日志文件位于 `%APPDATA%\VoiceCoding\logs\`
+- **日志系统** - 日志文件位于 `%APPDATA%\Voicing\logs\`
 - **菜单项**:
   - 📡 同步输入（开关）
   - 🚀 开机自启（开关）

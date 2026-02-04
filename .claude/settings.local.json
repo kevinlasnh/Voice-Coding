@@ -48,7 +48,12 @@
       "Bash(npx skills find:*)",
       "Bash(git push:*)",
       "Bash(git tag:*)",
-      "Bash(gh release view:*)"
+      "Bash(gh release view:*)",
+      "Bash(where.exe:*)",
+      "Bash(netstat:*)",
+      "Bash(\"C:/dev/java21/jdk-21.0.2/bin/java.exe\" -version)",
+      "Skill(crafting-effective-readmes)",
+      "Skill(release-skills)"
     ]
   }
 }

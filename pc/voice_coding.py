@@ -1,5 +1,5 @@
 """
-Voice Coding - PC Application
+Voicing - PC Application
 语音编程 - 电脑端应用
 
 A system tray application that receives text from phone and types it at cursor position.
@@ -37,11 +37,12 @@ import pyautogui
 import pystray
 from pystray import MenuItem as item
 from PIL import Image, ImageDraw
+import pyperclip
 
 # ============================================================
 # Single Instance Check / 单实例检查
 # ============================================================
-MUTEX_NAME = "VoiceCoding_SingleInstance_Mutex"
+MUTEX_NAME = "Voicing_SingleInstance_Mutex"
 
 def check_single_instance() -> bool:
     """
@@ -69,8 +70,8 @@ def show_already_running_message():
     """Show message that app is already running / 显示程序已运行的提示"""
     ctypes.windll.user32.MessageBoxW(
         0,
-        "Voice Coding 已经在运行中！\n\n请查看系统托盘图标。\n\nVoice Coding is already running!\nPlease check the system tray.",
-        "Voice Coding",
+        "Voicing 已经在运行中！\n\n请查看系统托盘图标。\n\nVoicing is already running!\nPlease check the system tray.",
+        "Voicing",
         0x40  # MB_ICONINFORMATION
     )
 
@@ -78,7 +79,7 @@ def show_already_running_message():
 # ============================================================
 # Configuration / 配置
 # ============================================================
-APP_NAME = "VoiceCoding"
+APP_NAME = "Voicing"
 APP_VERSION = "1.9.0"
 WS_PORT = 9527      # WebSocket port
 STARTUP_REGISTRY_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
@@ -114,7 +115,7 @@ state = AppState()
 def setup_logging():
     """设置日志系统"""
     # 日志文件保存在用户数据目录
-    log_dir = Path(os.environ.get('APPDATA', Path.home())) / 'VoiceCoding' / 'logs'
+    log_dir = Path(os.environ.get('APPDATA', Path.home())) / 'Voicing' / 'logs'
     log_dir.mkdir(parents=True, exist_ok=True)
     
     # 使用日期作为文件名
@@ -133,7 +134,7 @@ def setup_logging():
             logging.StreamHandler(sys.stdout)  # 同时输出到控制台
         ]
     )
-    logging.info(f"=== Voice Coding 启动 ===")
+    logging.info(f"=== Voicing 启动 ===")
     logging.info(f"日志文件: {log_file}")
 
 
@@ -361,7 +362,7 @@ async def handle_client(websocket):
         # Send welcome message with current sync state and computer name
         await websocket.send(json.dumps({
             "type": "connected",
-            "message": "Connected to Voice Coding server",
+            "message": "Connected to Voicing server",
             "sync_enabled": state.sync_enabled,
             "computer_name": computer_name
         }))
@@ -389,64 +390,6 @@ async def handle_client(websocket):
                             "type": "ack",
                             "message": "Text received and typed"
                         }))
-
-                elif msg_type == "shadow_full_sync":
-                    # 影随模式 1:1 完全同步（全选+粘贴）
-                    if not state.sync_enabled:
-                        continue
-
-                    text = data.get("content", "")
-                    if text is not None:
-                        try:
-                            # 保存当前剪贴板
-                            old_clipboard = ""
-                            try:
-                                old_clipboard = pyperclip.paste()
-                            except Exception as e:
-                                logging.warning(f"获取剪贴板失败: {e}")
-                                old_clipboard = ""
-
-                            # 复制新文本到剪贴板
-                            pyperclip.copy(text)
-
-                            # 全选 + 粘贴（完全替换）
-                            pyautogui.hotkey('ctrl', 'a')
-                            time.sleep(0.01)
-                            pyautogui.hotkey('ctrl', 'v')
-
-                            # 恢复剪贴板
-                            time.sleep(0.05)
-                            try:
-                                pyperclip.copy(old_clipboard)
-                            except Exception as e:
-                                logging.warning(f"恢复剪贴板失败: {e}")
-                        except Exception as e:
-                            logging.error(f"影随模式同步失败: {e}")
-
-                elif msg_type == "shadow_sync":
-                    # 影随模式：实时同步文字变化（追加）- 保留兼容
-                    if not state.sync_enabled:
-                        continue
-
-                    text = data.get("content", "")
-                    if text:
-                        type_text(text)
-
-                elif msg_type == "shadow_replace":
-                    # 影随模式：替换文本 - 保留兼容
-                    if not state.sync_enabled:
-                        continue
-
-                    delete_length = data.get("delete_length", 0)
-                    text = data.get("content", "")
-
-                    if delete_length > 0:
-                        for _ in range(min(delete_length, 100)):
-                            pyautogui.press('backspace')
-                        time.sleep(0.05)
-
-                    if text:
-                        type_text(text)
 
                 elif msg_type == "ping":
                     # Respond with pong and current sync state
@@ -781,7 +724,7 @@ class ModernMenuWidget(QWidget):
             subprocess.Popen(['notepad.exe', str(state.log_file)])
         else:
             # 打开日志目录
-            log_dir = Path(os.environ.get('APPDATA', Path.home())) / 'VoiceCoding' / 'logs'
+            log_dir = Path(os.environ.get('APPDATA', Path.home())) / 'Voicing' / 'logs'
             log_dir.mkdir(parents=True, exist_ok=True)
             os.startfile(str(log_dir))
 
@@ -801,32 +744,68 @@ class ModernTrayIcon(QSystemTrayIcon):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.menu_widget = None
+        # 预先缓存图标
+        self._icon_cache = {}
+        self._init_icon_cache()
+        # 预先创建菜单（避免首次打开慢）
+        self.menu_widget = ModernMenuWidget()
         self.setup_icon()
         self.setup_menu()
+        # 设置悬停提示
+        self.setToolTip("Voicing")
+
+    def _init_icon_cache(self):
+        """预先生成并缓存所有状态的图标"""
+        import io
+        size = 256
+
+        # 生成基础圆形图标
+        bg_color = (26, 26, 46, 255)  # #1A1A2E
+        base = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(base)
+        draw.ellipse([0, 0, size-1, size-1], fill=bg_color)
+        original = load_base_icon(size)
+        base = Image.alpha_composite(base, original)
+        mask = Image.new('L', (size, size), 0)
+        ImageDraw.Draw(mask).ellipse([0, 0, size-1, size-1], fill=255)
+        base.putalpha(mask)
+
+        # 缓存：正常状态
+        self._icon_cache['normal'] = self._pil_to_qicon(base)
+
+        # 缓存：暗淡状态（闪烁用）
+        dim = base.copy()
+        alpha = dim.split()[3]
+        alpha = alpha.point(lambda x: int(x * 0.4))
+        dim.putalpha(alpha)
+        self._icon_cache['dim'] = self._pil_to_qicon(dim)
+
+        # 缓存：灰度状态（暂停用）
+        r, g, b, a = base.split()
+        gray = base.convert('L')
+        paused = Image.merge('RGBA', (gray, gray, gray, a))
+        self._icon_cache['paused'] = self._pil_to_qicon(paused)
+
+    def _pil_to_qicon(self, pil_image):
+        """PIL Image 转 QIcon"""
+        import io
+        byte_data = io.BytesIO()
+        pil_image.save(byte_data, format='PNG')
+        byte_data.seek(0)
+        qpix = QPixmap()
+        qpix.loadFromData(byte_data.getvalue())
+        return QIcon(qpix)
 
     def setup_icon(self):
-        """设置图标"""
-        # 使用 PIL 创建图标并转换为 QPixmap
-        from PIL import Image, ImageDraw
+        """设置图标 - 使用新的麦克风+声波图标"""
         import io
-
-        size = 32
-        image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(image)
-
-        # 蓝色背景圆
-        draw.ellipse([2, 2, size-2, size-2], fill='#2196F3')
-
-        # 白色 "V"
-        draw.polygon([
-            (8, 10), (16, 22), (24, 10),
-            (21, 10), (16, 18), (11, 10)
-        ], fill='white')
-
+        
+        # 加载基础图标
+        icon = load_base_icon(32)
+        
         # 转换为 QPixmap
         byte_data = io.BytesIO()
-        image.save(byte_data, format='PNG')
+        icon.save(byte_data, format='PNG')
         byte_data.seek(0)
         qpix = QPixmap()
         qpix.loadFromData(byte_data.getvalue())
@@ -840,15 +819,12 @@ class ModernTrayIcon(QSystemTrayIcon):
 
     def on_tray_activated(self, reason):
         """托盘图标激活事件"""
-        if reason == QSystemTrayIcon.Trigger or reason == QSystemTrayIcon.Context:
-            # 左键或右键点击显示自定义菜单
+        if reason == QSystemTrayIcon.Context:
+            # 只有右键点击才显示菜单
             self.show_custom_menu()
 
     def show_custom_menu(self):
         """显示自定义菜单"""
-        if self.menu_widget is None:
-            self.menu_widget = ModernMenuWidget()
-
         # 更新状态
         self.menu_widget.update_state()
 
@@ -856,115 +832,115 @@ class ModernTrayIcon(QSystemTrayIcon):
         pos = QCursor.pos()
         self.menu_widget.show_at_position(pos)
 
-    def update_icon(self, status):
-        """更新图标状态"""
-        from PIL import Image, ImageDraw
-        import io
+    def update_icon(self, status, dim=False):
+        """更新图标状态 - 使用缓存的图标（快速切换）
 
-        size = 32
-        image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-        draw = ImageDraw.Draw(image)
-
+        Args:
+            status: 未使用，保留兼容
+            dim: 是否为暗淡状态（用于闪烁效果）
+        """
         if not state.sync_enabled:
-            # 灰色 - 暂停
-            bg_color = '#9E9E9E'
-        elif len(state.connected_clients) > 0:
-            # 绿色 - 已连接
-            bg_color = '#4CAF50'
+            # 暂停状态
+            self.setIcon(self._icon_cache['paused'])
+        elif len(state.connected_clients) == 0 and dim:
+            # 等待连接 + 暗淡状态
+            self.setIcon(self._icon_cache['dim'])
         else:
-            # 蓝色 - 等待连接
-            bg_color = '#2196F3'
-
-        # 背景圆
-        draw.ellipse([2, 2, size-2, size-2], fill=bg_color)
-
-        # 白色 "V"
-        draw.polygon([
-            (8, 10), (16, 22), (24, 10),
-            (21, 10), (16, 18), (11, 10)
-        ], fill='white')
-
-        # 转换为 QPixmap
-        byte_data = io.BytesIO()
-        image.save(byte_data, format='PNG')
-        byte_data.seek(0)
-        qpix = QPixmap()
-        qpix.loadFromData(byte_data.getvalue())
-
-        self.setIcon(QIcon(qpix))
+            # 正常状态（已连接或等待连接的亮状态）
+            self.setIcon(self._icon_cache['normal'])
 
 
 # ============================================================
 # System Tray / 系统托盘 (保留兼容函数)
 # ============================================================
+
+def get_base_icon_path() -> str:
+    """获取基础图标路径"""
+    if getattr(sys, 'frozen', False):
+        # 打包后的路径
+        base_path = sys._MEIPASS
+    else:
+        # 开发环境路径
+        base_path = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base_path, 'assets', 'icon_1024.png')
+
+
+def load_base_icon(size: int = 64) -> Image.Image:
+    """加载并缩放基础图标"""
+    icon_path = get_base_icon_path()
+    try:
+        icon = Image.open(icon_path)
+        icon = icon.convert('RGBA')
+        icon = icon.resize((size, size), Image.Resampling.LANCZOS)
+        return icon
+    except Exception as e:
+        logging.warning(f"无法加载图标 {icon_path}: {e}，使用备用图标")
+        # 备用图标：简单的圆形
+        fallback = Image.new('RGBA', (size, size), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(fallback)
+        draw.ellipse([4, 4, size-4, size-4], fill='#2196F3')
+        return fallback
+
+
+def apply_color_tint(image: Image.Image, color: tuple) -> Image.Image:
+    """应用颜色蒙版到图标（保留透明度）"""
+    # 创建颜色蒙版
+    tinted = Image.new('RGBA', image.size, color)
+    # 使用原图的 alpha 通道作为蒙版
+    result = Image.composite(tinted, Image.new('RGBA', image.size, (0, 0, 0, 0)), image.split()[3])
+    return result
+
+
+def add_status_border(image: Image.Image, color: str, width: int = 4) -> Image.Image:
+    """给图标添加状态边框"""
+    size = image.size[0]
+    result = image.copy()
+    draw = ImageDraw.Draw(result)
+    # 绘制圆形边框
+    draw.ellipse([0, 0, size-1, size-1], outline=color, width=width)
+    return result
+
+
 def create_icon_connected() -> Image.Image:
-    """Create connected state tray icon (green) / 创建已连接状态托盘图标（绿色）"""
+    """创建已连接状态托盘图标（正常彩色） / Create connected state tray icon (normal color)"""
     size = 64
-    image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    
-    # Green background circle - connected
-    draw.ellipse([4, 4, size-4, size-4], fill='#4CAF50')
-    
-    # White "V" shape for Voice
-    draw.polygon([
-        (16, 20), (32, 44), (48, 20),
-        (42, 20), (32, 36), (22, 20)
-    ], fill='white')
-    
-    return image
+    icon = load_base_icon(size)
+    # 直接返回原图，不加边框
+    return icon
 
 
 def create_icon_waiting() -> Image.Image:
-    """Create waiting state tray icon (blue) / 创建等待连接状态托盘图标（蓝色）"""
+    """创建等待连接状态托盘图标（正常） / Create waiting state tray icon (normal)"""
     size = 64
-    image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    
-    # Blue background circle - waiting for connection
-    draw.ellipse([4, 4, size-4, size-4], fill='#2196F3')
-    
-    # White "V" shape for Voice
-    draw.polygon([
-        (16, 20), (32, 44), (48, 20),
-        (42, 20), (32, 36), (22, 20)
-    ], fill='white')
-    
-    return image
+    icon = load_base_icon(size)
+    return icon
 
 
 def create_icon_waiting_dim() -> Image.Image:
-    """Create dim waiting state tray icon (dark blue) / 创建暗淡等待状态托盘图标（深蓝色）"""
+    """创建暗淡等待状态托盘图标（低透明度） / Create dim waiting state tray icon (low opacity)"""
     size = 64
-    image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    
-    # Darker blue background circle - for blinking effect
-    draw.ellipse([4, 4, size-4, size-4], fill='#1565C0')
-    
-    # Dimmer white "V" shape
-    draw.polygon([
-        (16, 20), (32, 44), (48, 20),
-        (42, 20), (32, 36), (22, 20)
-    ], fill='#B3E5FC')
-    
-    return image
+    icon = load_base_icon(size)
+    # 降低透明度实现闪烁效果
+    alpha = icon.split()[3]
+    alpha = alpha.point(lambda x: int(x * 0.4))  # 40% 透明度
+    icon.putalpha(alpha)
+    return icon
 
 
 def create_icon_paused() -> Image.Image:
-    """Create paused state tray icon / 创建暂停状态托盘图标"""
+    """创建暂停状态托盘图标（灰度） / Create paused state tray icon (grayscale)"""
     size = 64
-    image = Image.new('RGBA', (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(image)
-    
-    # Gray background circle
-    draw.ellipse([4, 4, size-4, size-4], fill='#9E9E9E')
-    
-    # White pause bars
-    draw.rectangle([20, 18, 28, 46], fill='white')
-    draw.rectangle([36, 18, 44, 46], fill='white')
-    
-    return image
+    icon = load_base_icon(size)
+
+    # 转换为灰度，保留透明度
+    # 分离通道
+    r, g, b, a = icon.split()
+    # 转灰度
+    gray = icon.convert('L')
+    # 重新组合，使用原始 alpha 通道
+    result = Image.merge('RGBA', (gray, gray, gray, a))
+
+    return result
 
 
 def toggle_sync(icon, menu_item):
@@ -1031,15 +1007,15 @@ def update_tray_icon(icon):
     if not state.sync_enabled:
         # Sync disabled - gray icon
         icon.icon = create_icon_paused()
-        icon.title = f"Voice Coding - Paused\nws://{HOTSPOT_IP}:{state.ws_port}"
+        icon.title = f"Voicing - Paused\nws://{HOTSPOT_IP}:{state.ws_port}"
     elif len(state.connected_clients) > 0:
         # Has connected clients - green icon
         icon.icon = create_icon_connected()
         client_count = len(state.connected_clients)
-        icon.title = f"Voice Coding - {client_count} Connected\nws://{HOTSPOT_IP}:{state.ws_port}"
+        icon.title = f"Voicing - {client_count} Connected\nws://{HOTSPOT_IP}:{state.ws_port}"
     else:
         # Waiting for connection - blue blinking icon
-        icon.title = f"Voice Coding - Waiting\nws://{HOTSPOT_IP}:{state.ws_port}"
+        icon.title = f"Voicing - Waiting\nws://{HOTSPOT_IP}:{state.ws_port}"
         start_blink_timer(icon)
 
 
@@ -1066,7 +1042,7 @@ def run_tray():
     # 定时更新图标状态
     update_timer = QTimer()
     update_timer.timeout.connect(lambda: update_tray_icon_pyqt(tray_icon))
-    update_timer.start(1000)  # 每秒更新
+    update_timer.start(200)  # 每200ms更新（闪烁）
 
     # 运行应用
     app.exec()
@@ -1074,8 +1050,14 @@ def run_tray():
 
 def update_tray_icon_pyqt(tray_icon):
     """更新 PyQt5 托盘图标状态"""
-    # 更新图标
-    tray_icon.update_icon(None)
+    # 判断是否需要闪烁（等待连接状态）
+    if state.sync_enabled and len(state.connected_clients) == 0:
+        # 等待连接 - 切换闪烁状态
+        state.blink_state = not state.blink_state
+        tray_icon.update_icon(None, dim=state.blink_state)
+    else:
+        # 其他状态 - 正常更新
+        tray_icon.update_icon(None, dim=False)
 
 
 # 保留兼容的 update_tray_icon 函数
@@ -1089,13 +1071,13 @@ def update_tray_icon(icon=None):
 
     if not state.sync_enabled:
         icon.icon = create_icon_paused()
-        icon.title = f"Voice Coding - Paused\nws://{HOTSPOT_IP}:{state.ws_port}"
+        icon.title = f"Voicing - Paused\nws://{HOTSPOT_IP}:{state.ws_port}"
     elif len(state.connected_clients) > 0:
         icon.icon = create_icon_connected()
         client_count = len(state.connected_clients)
-        icon.title = f"Voice Coding - {client_count} Connected\nws://{HOTSPOT_IP}:{state.ws_port}"
+        icon.title = f"Voicing - {client_count} Connected\nws://{HOTSPOT_IP}:{state.ws_port}"
     else:
-        icon.title = f"Voice Coding - Waiting\nws://{HOTSPOT_IP}:{state.ws_port}"
+        icon.title = f"Voicing - Waiting\nws://{HOTSPOT_IP}:{state.ws_port}"
         start_blink_timer(icon)
 
 

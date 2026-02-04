@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   runApp(const VoiceCodingApp());
@@ -15,7 +16,7 @@ class VoiceCodingApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Voice Coding',
+      title: 'Voicing',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -74,8 +75,9 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
   int _serverPort = 9527;
   String _lastSentText = '';  // 保存上次发送的文本
   bool _showMenu = false;  // 是否显示下拉菜单
-  bool _shadowModeEnabled = false;  // 影随模式开关
-  Timer? _shadowModeDebounce;  // 影随模式防抖定时器
+  bool _shadowModeEnabled = false;  // 自动发送开关
+  int _lastSentLength = 0;  // 自动发送：已发送的字符数
+  bool _wasComposing = false;  // 自动发送：上一次是否有组合文本（带下划线）
   RawDatagramSocket? _udpSocket;  // UDP 监听套接字
   StreamSubscription<RawSocketEvent>? _udpSubscription;  // UDP 订阅
   static const int _udpBroadcastPort = 9530;  // UDP 广播端口
@@ -104,6 +106,12 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
       curve: Curves.easeOut,
     );
 
+    // 监听文本控制器变化（包括 composing 状态）
+    _textController.addListener(_onTextControllerChanged);
+
+    // 加载用户偏好设置
+    _loadPreferences();
+
     // 启动 UDP 发现监听
     _startUdpDiscovery();
 
@@ -111,11 +119,25 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
     _connect();
   }
 
+  /// 加载用户偏好设置
+  Future<void> _loadPreferences() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _shadowModeEnabled = prefs.getBool('autoSendEnabled') ?? false;
+    });
+  }
+
+  /// 保存自动发送开关状态
+  Future<void> _saveAutoSendPreference(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('autoSendEnabled', value);
+  }
+
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _reconnectTimer?.cancel();
-    _shadowModeDebounce?.cancel();  // 清理影随模式防抖定时器
+    _textController.removeListener(_onTextControllerChanged);
     _channel?.sink.close();
     _textController.dispose();
     _scrollController.dispose();
@@ -270,31 +292,63 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
         'type': 'text',
         'content': text,
       }));
-      // 保存文本用于撤回（发送成功后再保存）
+      // 保存文本用于撤回
       _lastSentText = text;
+      // 重置自动发送已发送长度（因为文本框会被清空）
+      _lastSentLength = 0;
     } catch (e) {
       // 发送失败，不保存文本
     }
   }
 
-  /// 影随模式：实时同步文字变化到 PC 端（1:1 完全同步）
-  void _onTextChanged(String text) {
+  /// 自动发送：监听文本控制器变化，检测 composing 状态
+  void _onTextControllerChanged() {
+    final currentText = _textController.text;
+
+    // 如果文本长度小于已发送长度，说明文本被清空或删除了，需要重置
+    if (currentText.length < _lastSentLength) {
+      _lastSentLength = currentText.length;
+    }
+
     if (!_shadowModeEnabled || _status != ConnectionStatus.connected || !_syncEnabled) {
       return;
     }
 
-    // 防抖：避免频繁发送
-    _shadowModeDebounce?.cancel();
-    _shadowModeDebounce = Timer(const Duration(milliseconds: 100), () {
-      try {
-        _channel!.sink.add(json.encode({
-          'type': 'shadow_full_sync',
-          'content': text,
-        }));
-      } catch (e) {
-        print('影随模式同步失败: $e');
-      }
-    });
+    // 检查当前是否有组合文本（带下划线）
+    final composing = _textController.value.composing;
+    final isComposing = composing.isValid && !composing.isCollapsed;
+
+    // 检测：从"有组合文本"变成"无组合文本"（下划线消失）
+    if (_wasComposing && !isComposing) {
+      // 输入法完成了输入，发送增量
+      _sendShadowIncrement(currentText);
+    }
+
+    // 更新状态
+    _wasComposing = isComposing;
+  }
+
+  /// 发送自动发送的增量内容
+  void _sendShadowIncrement(String currentText) {
+    // 只发送新增的部分
+    if (currentText.length <= _lastSentLength) {
+      return;  // 没有新增内容
+    }
+
+    String increment = currentText.substring(_lastSentLength);
+
+    try {
+      _channel!.sink.add(json.encode({
+        'type': 'text',
+        'content': increment,
+      }));
+      // 更新已发送长度
+      _lastSentLength = currentText.length;
+      // 保存当前文本用于撤回（自动发送模式下也能撤回）
+      _lastSentText = currentText;
+    } catch (e) {
+      print('自动发送失败: $e');
+    }
   }
 
   @override
@@ -517,13 +571,25 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
                           ),
                           // 间距
                           const SizedBox(height: 10),
-                          // 影随模式开关
+                          // 自动发送开关
                           _buildSwitchMenuItem(
-                            icon: Icons.sync,
-                            text: '影随模式',
+                            icon: Icons.send,
+                            text: '自动发送',
                             value: _shadowModeEnabled,
                             onChanged: (value) {
-                              setState(() => _shadowModeEnabled = value);
+                              setState(() {
+                                _shadowModeEnabled = value;
+                                if (value) {
+                                  // 开启时，从当前文本长度开始
+                                  _lastSentLength = _textController.text.length;
+                                  _wasComposing = false;
+                                } else {
+                                  _lastSentLength = 0;
+                                  _wasComposing = false;
+                                }
+                              });
+                              // 保存用户偏好
+                              _saveAutoSendPreference(value);
                             },
                           ),
                         ],
@@ -616,11 +682,11 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
             // 滑动开关
             AnimatedContainer(
               duration: const Duration(milliseconds: 200),
-              width: 48,
-              height: 28,
+              width: 42,
+              height: 24,
               decoration: BoxDecoration(
-                color: value ? const Color(0xFFD97757) : const Color(0xFF6B6B6B),
-                borderRadius: BorderRadius.circular(14),
+                color: value ? const Color(0xFF5CB87A) : const Color(0xFF6B6B6B),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Padding(
                 padding: const EdgeInsets.all(2),
@@ -628,11 +694,11 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
                   duration: const Duration(milliseconds: 200),
                   alignment: value ? Alignment.centerRight : Alignment.centerLeft,
                   child: Container(
-                    width: 24,
-                    height: 24,
+                    width: 20,
+                    height: 20,
                     decoration: BoxDecoration(
                       color: Colors.white,
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(10),
                       boxShadow: [
                         BoxShadow(
                           color: Colors.black.withOpacity(0.2),
@@ -698,7 +764,6 @@ class _MainPageState extends State<MainPage> with WidgetsBindingObserver, Ticker
         cursorColor: const Color(0xFFD97757),
         textInputAction: TextInputAction.send,
         onSubmitted: (_) => _sendText(),
-        onChanged: _onTextChanged,  // 影随模式监听
       ),
     );
   }

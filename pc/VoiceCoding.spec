@@ -5,7 +5,7 @@ a = Analysis(
     ['voice_coding.py'],
     pathex=[],
     binaries=[],
-    datas=[('web', 'web')],
+    datas=[('assets', 'assets')],
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
