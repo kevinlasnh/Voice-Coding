@@ -2,7 +2,7 @@
 
 <h1>Voicing</h1>
 
-<img src="android/voice_coding/assets/icons/icon_1024.png" width="180" alt="Voicing App Icon">
+<img src="android/voice_coding/assets/icons/icon_1024.png" width="180" alt="Voicing App Icon" style="border-radius: 50%;">
 
 <br>
 
