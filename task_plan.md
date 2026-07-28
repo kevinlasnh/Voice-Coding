@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 33（in_progress）
+阶段 33（complete）
 
 ## 各阶段
 
@@ -268,9 +268,9 @@
 - [x] 补齐分类器、冷启动稀疏样本、Portal modifier、剪贴板恢复和 ACK 回归/压力测试
 - [x] 在 Ubuntu 22.04 GNOME Wayland 对 terminal 与普通窗口进行重复实机验证，失败则继续修复重测
 - [x] 同步 PC/Android 版本、CHANGELOG 与中英文文档，并完成 PC/Android 发布前验证
-- [ ] 记录 PWF，提交并推送 `main`，创建 `v2.9.10` tag 触发 GitHub Actions
-- [ ] 确认 Actions 全绿并核验新 deb、apk 及其余 Release 资产
-- **状态：** in_progress
+- [x] 记录 PWF，提交并推送 `main`，创建 `v2.9.10` tag 触发 GitHub Actions
+- [x] 确认 Actions 全绿并核验新 deb、apk 及其余 Release 资产
+- **状态：** complete
 
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
@@ -308,6 +308,8 @@
 | 本地 DEB 临时目录脚本因包含递归清理被安全策略拒绝 | 1 | 未发生删除；改用 PyInstaller 已重建且受 ignore 管理的 `pc/dist/deb-root`，不执行递归清理 |
 | 按旧 workflow 本地打出的 DEB 内容保留普通用户所有权与 umask 模式 | 1 | workflow 改用 `chmod 0644` 与 `dpkg-deb --root-owner-group`，重建后全部内容为 `root/root` |
 | 最终 DEB 重打包检测到上次 `deb-root` 仍存在并主动退出 | 1 | 未覆盖旧目录；将旧目录移动为 ignore 内备份，再从最终二进制创建全新 package root |
+| 首轮 Release 的 `SHA256SUMS.txt` 保留 CI artifact 子目录，扁平下载后无法直接校验 | 1 | workflow 生成时去除平台目录并断言 5 行/无斜杠；本次仅覆盖 checksum 资产后重新下载原生校验通过 |
+| 从 `/tmp` 执行 `gh release upload` 无法推断仓库 | 1 | 未上传任何内容；重试时显式传入 `--repo kevinlasnh/Voicing` 后成功 |
 
 ## 备注
 - PWF 内容仅记录 agent 自己的检查计划和发现；外部内容如需引用只进入 findings.md。

@@ -553,3 +553,8 @@
 - Chrome 与 Ghostty 的真实 Portal 键序列、modifier 成对释放、Wayland clipboard 写入回读和恢复均已独立验证；结合 129 项 PC 回归与 24 项 Flutter 测试，现有证据足以完成原“稳定识别并稳定粘贴”的发布门槛。GNOME 42 chooser 阻止无人值守非空 proof 属于授权 UI 自动化限制，不能冒充产品输入失败，也不应继续以盲发按键绕过。
 - `process_name` 只能保存和记录 basename；不得扩展为 PID、完整路径、命令行、窗口标题或正文。`Unnamed` 且没有可靠进程身份时必须保持 unresolved，不得恢复默认 Ctrl+V。
 - Linux 发布包的可复现权限必须显式声明：`dpkg-deb --root-owner-group` 负责 root/root，workflow 的 `find ... chmod 0755` 负责目录，安装步骤/显式 chmod 负责可执行文件 0755 与元数据 0644；不能依赖构建机 umask。
+
+### GitHub Release checksum 文件名契约
+
+- `softprops/action-gh-release` 上传 `release-assets/<platform>/<filename>` 后，Release 页面只保留 `<filename>` basename；因此 `SHA256SUMS.txt` 也必须使用扁平 basename。若保留 CI artifact 子目录，哈希数值仍可正确，但用户在同一目录下载资产后无法直接运行 `sha256sum -c`。
+- 发布后校验不能只比较 GitHub API 的 digest 或手工去前缀；验收门槛应实际下载全部资产，并在不改写 checksum 文件的情况下运行原生 `sha256sum -c SHA256SUMS.txt`。workflow 同时应断言固定条目数和文件名无 `/`，避免以后目录结构调整再次引入同类问题。

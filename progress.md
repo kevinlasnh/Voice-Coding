@@ -1229,3 +1229,15 @@
 - 最终 `pc/dist/voicing-linux-amd64.deb` SHA-256 为 `0a9169e479f3f1c63f4b6ae4a6756b144441cbc15b590845a50da5dada1f7573`；版本 2.9.10、amd64，Depends 包含 AT-SPI/Python GI/`wl-clipboard`，包内 owner 全为 root/root，目录与二进制 0755、desktop/icon 0644。
 - 最终发布前验证重新执行：完整 PC suite 129 tests OK；PC `py_compile` 通过；Flutter analyze 0 问题；Flutter test 24 tests passed；Release workflow YAML 成功解析出 6 个 jobs；`git diff --check` 通过。
 - 本轮实机门槛已判定完成：普通 Chrome 20/20 为 normal，真实 Ghostty 修复后 20/20 为 terminal；两侧真实 Portal 分别发送完整 `ctrl_v` 4 事件与 `ctrl_shift_v` 6 事件，所有 modifier 释放且 clipboard restore 均 MATCH。无人值守非空 proof 因 GNOME 42 授权 chooser 无法安全自动确认而停止，不再重复该失败路线。
+
+### 阶段 33：首轮 GitHub Release 审计与 checksum 路径修复
+- **状态：** complete
+- 发布提交 `fa09391` 已推送到 `origin/main`，lightweight tag `v2.9.10` 指向同一提交；Actions run `30330984843` 的 Android、Windows、macOS、Linux、Release Notes 与 Publish Release 六个 job 全部成功。
+- Release 已发布六个预期资产。独立下载后发现 `SHA256SUMS.txt` 虽包含五个正确摘要，但文件名保留 `android/`、`windows/`、`macos/`、`linux/` CI artifact 子目录，而 GitHub Release 资产为扁平 basename，导致标准 `sha256sum -c SHA256SUMS.txt` 无法找到文件。
+- 使用仅移除路径前缀的流式校验后，五个 payload 均为 OK，证明二进制摘要本身正确。进一步核验：APK 为 2.9.10/versionCode 11、v1/v2 正式 RSA 4096 签名且非 Android Debug；DEB 为 2.9.10 amd64、依赖完整、root/root、目录/二进制 0755、元数据 0644；Linux 为 x86-64 ELF、Windows 为 x86-64 PE32+、macOS DMG 可识别。
+- 已修改 workflow，在生成 checksum 时去除 artifact 子目录并增加 5 行/无斜杠断言；本次 Release 将只覆盖 `SHA256SUMS.txt`，不改动已验证通过的五个 payload，随后重新下载执行原生 `sha256sum -c`。
+- 本地将 checksum 文件仅移除五个平台路径前缀后，原生 `sha256sum -c SHA256SUMS.txt` 五项全部通过；修正版 checksum SHA-256 为 `b394e7ec05f60325ea8e3bb0462eba8f0adcf9b999c630dee72c03988f2c50bc`。
+- 首次从 `/tmp` 运行 `gh release upload` 因不在 Git 仓库中无法推断 repo，命令在上传前退出，Release 未发生变化；随后显式使用 `--repo kevinlasnh/Voicing --clobber` 成功只替换 `SHA256SUMS.txt`。
+- 已从远端重新下载修正版 checksum，不做 sed/路径转换直接对已下载五个资产运行 `sha256sum -c`，APK、Windows EXE、macOS DMG、Linux DEB、Linux standalone 全部 OK；GitHub API digest 与本地修正版一致。
+- Release `v2.9.10` 最终状态：非 draft、非 prerelease，六个资产齐全；Actions run `30330984843` conclusion=success；发布页面为 `https://github.com/kevinlasnh/Voicing/releases/tag/v2.9.10`。
+- 阶段 33 的代码修复、实机验收、全套自动化、main/tag 推送、Actions 构建、正式 APK/DEB 与跨平台资产审计、checksum 修复均已完成。

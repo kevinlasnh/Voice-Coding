@@ -420,7 +420,14 @@ jobs:
             windows/voicing-windows-x64.exe \
             macos/voicing-macos-arm64.dmg \
             linux/voicing-linux-amd64.deb \
-            linux/voicing-linux-x86_64 > SHA256SUMS.txt
+            linux/voicing-linux-x86_64 \
+            | sed -E 's#  (android|windows|macos|linux)/#  #' \
+            > SHA256SUMS.txt
+          test "$(wc -l < SHA256SUMS.txt)" -eq 5
+          if awk '{print $2}' SHA256SUMS.txt | grep -q '/'; then
+            echo "SHA256SUMS.txt must use flat GitHub Release asset names" >&2
+            exit 1
+          fi
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65
