@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 31（complete）
+阶段 32（complete）
 
 ## 各阶段
 
@@ -253,6 +253,14 @@
 - [x] 用户确认调研摘要后生成 deployment plan
 - **状态：** complete
 
+### 阶段 32：全仓逐文件审查与仓库级 Agent Markdown 初始化
+- [x] 建立排除 `.git/` 内部对象后的完整文件清单，并逐文件检查文本、配置、源码、资源及二进制元数据
+- [x] 基于实际仓库结构与工作流编写根目录 `AGENTS.md` 和 `CLAUDE.md`，保证内容完全一致且 H1 为 `# Repository Agent Markdown`
+- [x] 校正 `.gitignore`：仓库根 Agent Markdown 保持本地忽略，PWF 三件套保持 Git 跟踪
+- [x] 运行配置一致性、编码、Git diff 和适当项目验证
+- [x] 同步 PWF 三件套，提交本次应推送文件并推送当前分支
+- **状态：** complete
+
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
 2. PC 端、Android 端和 protocol 目录之间如何协作？
@@ -262,7 +270,7 @@
 | 决策 | 理由 |
 |------|------|
 | 使用 PWF 记录本次检查 | 任务涉及多目录、多文件和多阶段阅读，适合持久化上下文 |
-| 同步新增 `CLAUDE.md` 与 `AGENTS.md` | 仓库级 agent 配置新增时应保持两份文件正文一致，仅 H1 工具名差异 |
+| 同步新增 `CLAUDE.md` 与 `AGENTS.md` | 仓库级 agent 配置新增时两份文件必须全文一致，H1 均为 `# Repository Agent Markdown` |
 | Linux 托盘改用系统原生 `QMenu` | 自定义 `Qt.Popup` 菜单在 GNOME/Wayland 下定位/半透明黑块/Esc/几何无效等问题多，原生菜单更稳 |
 | 保持 GNOME portal 输入后端，接受每次启动一次授权 | portal 在安全/零部署/可分发/跨发行版/前瞻性上全面优于 ydotool；ydotool 仅"无弹窗"占优但代价是 `/dev/uinput` 权限降级，不可作为已发布应用的默认 |
 

@@ -1000,6 +1000,56 @@
 ---
 *每个阶段完成后或遇到错误时更新此文件*
 
+## 会话：2026-07-28 CST — 全仓逐文件审查与 Agent Markdown 初始化
+
+### 阶段 32：启动与上下文恢复
+- **状态：** in_progress
+- 已归一化当前工作目录为 `/home/kevinlasnh/Projects/Voicing`，未命中 Second Brain Path Guard。
+- 已完整读取 `planning-with-files-zh` skill，并运行 session catchup；恢复脚本未报告未同步上下文。
+- 已确认仓库根目录、PWF 三件套均存在，当前分支为 `main`，与 `origin/main` 同步，工作区启动时干净。
+- 已确认当前根目录缺少 `AGENTS.md` 与 `CLAUDE.md`，尽管历史 PWF 曾记录过两份本地忽略文件；本次将依据当前仓库重新初始化。
+- 下一步：排除 `.git/` 内部数据库后建立完整文件清单，逐文件检查并记录结论。
+
+### 阶段 32：顶层文件与发布配置检查
+- **状态：** in_progress
+- 已建立完整清单：工作树 86 个文件、约 2.21 MB，启动时全部已跟踪。
+- 已完整阅读 `.claude/` 的本机权限与热重启 Skill、`.github/workflows/release.yml`、根 `.gitignore`、中英文根 README、Android README、CONTRIBUTING 和 LICENSE。
+- 已记录版本、架构、测试/发布命令、文档同步规则、仓库 Skill 历史例外与 `.gitignore` 约束。
+- 下一步：检查 CHANGELOG、Android 工程全部配置/源码/测试、PC 全部源码/测试、协议和二进制资源元数据。
+
+- 已逐行检查 CHANGELOG 1—660 行，确认 2.5.0—2.9.9 的架构、协议、平台、Release 与 Linux Wayland 演进；剩余历史版本继续核对。
+- 已完成 CHANGELOG 余下历史版本检查，并完整阅读 Android 工程的 Flutter/Gradle/Manifest/XML/依赖锁/启动脚本等配置文件。
+- 已完整阅读 Android 日志/主题/恢复策略/保存设备/协议/WebSocket 抽象，以及 `main.dart` 前 900 行 UI、菜单、输入框与扫码锁定逻辑。
+- 已读完 `main.dart` 余下扫码校验、角点映射、动画 painter；已阅读 controller 前 400 行扫码 probe、替换确认和候选 IP 保存流程。
+- 已读完 `voicing_connection_controller.dart`：保存地址候选轮询、generation 隔离、前台恢复、心跳、shadow/commit、ACK 清空、Auto Enter 与清理逻辑均已核对。
+- 已完整阅读 Kotlin `MainActivity.kt` 和全部 Android 测试，核对 native WiFi 选路、OkHttp/EventChannel 生命周期、IME inset 以及当前测试覆盖/缺口。
+- 已完整阅读 PC spec、依赖、设备身份、网络兼容、自启、单实例、平台工具、协议，以及 `platform_keyboard.py` 前 360 行输入/剪贴板/portal 初始化入口。
+- 已读完 `platform_keyboard.py`：portal request/session、D-Bus uint、键序列、Auto 投票、AT-SPI in-process/system helper 和 Windows SendInput 均已核对。
+- 已阅读 `voice_coding.py` 前 860 行，完成全局状态、日志、跨平台网络枚举/过滤/排序、QR 实际绑定 IP 优先与 WebSocket text/commit ACK 入口核对。
+- 已继续阅读 `voice_coding.py` 861—1720 行，核对 ping/sync 广播、listener 动态重绑、自定义托盘菜单定位、粘贴模式切换与 QR dialog payload/动画前半。
+- 已读完 `voice_coding.py` 和共享协议契约，完成 Linux 原生菜单、图标缓存、QR 成功态、主入口/单实例以及协议字段同步规则核对。
+- 已阅读 PC 测试第一组：身份、自启、网络恢复、server ACK、三平台接口解析和 platform utils/portal/frozen 环境覆盖。
+- 已完整阅读 576 行 `test_platform_keyboard.py`，确认 clipboard/PRIMARY、portal uint、键序列、AT-SPI 投票/cache/fallback 与 Windows Enter 的回归覆盖。
+- 已读完 PC protocol/tray 测试，并完成全部 14 个二进制资源的类型、尺寸、摘要及 Gradle wrapper archive/manifest 检查。
+- 已补读 `progress.md` 历史第 261—650 行，核对 Wayland、托盘、QR、Android 发送、Release 修复的实际演进与当前实现一致。
+- 已补读 `progress.md` 余下历史与 `findings.md` 全文；PWF 历史上下文恢复完成。
+- 已检查全部文本编码/换行、Git mode、软链接、敏感凭据标记与 ignore 规则：72 个文本均为有效 UTF-8/LF，14 个二进制已核验；未发现私钥或签名文件。
+
+### 阶段 32：仓库级 Agent Markdown 初始化与验证
+- **状态：** complete
+- 已在仓库根创建本地 `AGENTS.md` 与 `CLAUDE.md`，两份文件均为 123 行、10885 字节，H1 均为 `# Repository Agent Markdown`。
+- 两份配置基于本次逐文件审查整理了项目定位、目录职责、QR/WebSocket/ACK 数据流、Android 与 PC 分层、GNOME Wayland/托盘边界、按改动范围验证矩阵、Release、PWF/Git/凭据规则及已知风险。
+- 已显式记录 `.claude/settings.local.json` 与 `.claude/skills/pc-hot-restart/` 为历史跟踪例外；未来仓库 Skill 需要 `.agents/skills/` 与 `.claude/skills/` 两份实体副本同步，且禁止写入凭据。
+- `.gitignore` 已正确忽略根 `CLAUDE.md` / `AGENTS.md`、`.brv/`、`.workflows/` 和 `.tmp/`，PWF 三件套仍保持跟踪，因此本次无需修改 `.gitignore`，也不会 force-add 两份本地 Agent 文档。
+- 配置验证结果：
+  - `cmp -s AGENTS.md CLAUDE.md`：通过，两份 SHA-256 均为 `bca0747cd9d42114573e179f80e89ffd09cdfd9e2b24c09c571e8dd39e0ac8f6`。
+  - H1 检查：两份均为 `# Repository Agent Markdown`。
+  - `git check-ignore -v AGENTS.md CLAUDE.md`：通过，分别命中根 `.gitignore` 第 108、107 行。
+  - `file -bi`、CR 扫描和末尾字节检查：两份均为 UTF-8、无 CR、以 LF 结尾。
+  - `git diff --check`：通过。
+- 本次没有修改 PC、Android、协议或 Release 业务文件，按仓库验证矩阵不运行无关的 PC/Flutter 全套测试；提交范围仅为 PWF 三件套，两份 Agent Markdown 保持本地忽略。
+- 已准备提交阶段 32 的 PWF 记录并推送 `main`；推送后将核验本地 HEAD、远端 `origin/main` 与最终工作区状态。
+
 ## 会话：2026-07-21 CST — GNOME Wayland 冷启动 terminal 粘贴误判重型调研
 
 ### Heavy Research 启动

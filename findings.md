@@ -276,3 +276,163 @@
 - 用户已接受上述关键缺口。最终 deployment plan 将修复拆成互斥证据分支：日志确认 Ctrl+V 才改 classifier，确认 Ctrl+Shift+V 但 Shift 未生效才改 portal chord，确认 selection owner 失败才改 clipboard。
 - AUTO 目标策略确定为三态：可靠 terminal、可靠 normal、unresolved。unresolved 在总预算内重采样，超时不发任何粘贴快捷键，并沿现有失败 ACK 保留 Android 端文本。
 - 发布门槛确定为至少 10 次干净 GNOME 登录零误判，同时保护普通窗口、剪贴板恢复、modifier 释放和非 Wayland 平台行为。
+
+## 2026-07-28 全仓逐文件审查：初始状态
+
+- 仓库根目录为 `/home/kevinlasnh/Projects/Voicing`，不在 Second Brain 保护目录内。
+- 当前 Git 分支为 `main`，启动时工作区干净并与 `origin/main` 同步；唯一 worktree 即当前主 worktree。
+- PWF 三件套存在且已被历史任务持续维护；session catchup 未报告遗漏上下文。
+- 根目录当前没有 `AGENTS.md` / `CLAUDE.md`，但历史进度曾记录创建过被 `.gitignore` 忽略的本地副本，说明这些文件未进入版本历史、后来已不在工作区。
+- 本次“每一个文件”的审查边界为仓库工作树内所有实际文件（含隐藏和忽略文件），排除 Git 自身的 `.git/` 对象数据库；二进制文件检查类型、尺寸、摘要和可提取元数据，文本文件检查实际内容。
+
+### 清单与顶层工作流
+
+- 当前工作树共有 86 个实际文件，总大小约 2.21 MB；所有文件在会话开始时均已被 Git 跟踪。
+- `.claude/settings.local.json` 是 Claude Code 本机权限白名单；`.claude/skills/pc-hot-restart/` 是 Windows PowerShell 热重启 Skill，但其文档示例仍硬编码旧路径 `C:\Zero\Doc\Cloud\GitHub\Voice-Coding`，脚本本身则能从 `$PSScriptRoot` 正确反推仓库根目录。
+- `.github/workflows/release.yml` 由 `v*` tag 触发，固定 Flutter 3.27.0、Java 17、Python 3.12，先做 Android/PC 测试，再并行构建 APK、Windows EXE、macOS DMG、Linux standalone/DEB，最后生成 SHA256SUMS 并发布 GitHub Release；第三方 Actions 均使用 commit SHA 固定版本。
+- `.gitignore` 已忽略根目录 `AGENTS.md` / `CLAUDE.md`、`.brv/`、`.workflows/`、`.tmp/` 和常见构建产物；PWF 三件套未被忽略且当前已跟踪，符合当前全局策略。它尚未声明一般性的 `.claude/` / `.agents/` 隐藏目录规则，而 `.claude/` 当前已有被跟踪内容，需在仓库级 Agent Markdown 中明确其历史例外与同步边界。
+- 中英文根 README 与 Android README 一致描述当前版本 `2.9.9`：Android 手机把语音/文本经 TCP 9527 WebSocket 发到 Python/PyQt5 桌面端，扫码保存同一 PC 的多 IP 候选并自动恢复；Linux GNOME Wayland 通过 RemoteDesktop portal 和终端感知粘贴模式输入。
+- `CONTRIBUTING.md` 要求 Python 遵循 PEP 8、Dart 保持现有主题与 controller 分层；用户可见行为必须同步 CHANGELOG、根 README 和相关子目录文档；Android 原生层改动必须重新安装完整 APK 验证，不能只做 Flutter hot restart。
+
+### CHANGELOG 当前架构演进（上半部分）
+
+- 当前 `Unreleased` 为空；最新发布为 2.9.9（2026-06-22）。Agent 规则应把版本更新视为 PC `APP_VERSION`、Android `pubspec.yaml`、README 徽章/示例和 CHANGELOG 发布块的联动操作。
+- 2.5.0 起双端协议常量从 UI/主程序中抽离，并新增 `protocol/voicing_protocol_contract.json` 及双端契约测试；协议修改必须三处同步。
+- 2.6.x 引入 `send_mode=submit/shadow/commit`、`auto_enter` 与 `ack.clear_input`，核心不变量是：桌面注入/Enter 真正成功后才允许手机端清空文本。
+- 2.7.x 建立 Windows/macOS/Linux 平台抽象、四平台 Release、SHA256 校验和第三方 Action SHA 固定；Android 原生 release signing 不允许静默退回 debug。
+- 2.9.x 从 UDP discovery 迁移到 QR-only 保存设备与多 IP 候选恢复；PC 端运行时重绑监听地址，二维码优先发布实际绑定成功 IP；同一 `device_id` 重扫合并候选池，不同设备替换不得混合旧地址。
+- 2.9.5—2.9.9 的 Linux 主路径为 GNOME Wayland RemoteDesktop portal + Wayland clipboard + AT-SPI 终端识别；历史版本说明存在策略迭代，仓库级规则应以当前源码、2.9.9 文档和测试为准，不复制已被后续版本推翻的旧行为。
+
+### Android 工程配置与依赖
+
+- Flutter 工程版本为 `2.9.9+10`，Dart SDK 约束 `^3.5.4`；直接依赖为 `web_socket_channel 2.4.5`、`shared_preferences`、`mobile_scanner` 和 `cupertino_icons`，锁文件固定了完整传递依赖与摘要。
+- Android applicationId/namespace 为 `com.voicecoding.app`，min/target/compile SDK 跟随 Flutter，NDK 固定 `27.0.12077973`，AGP 8.7.0、Kotlin 1.9.22、Gradle wrapper 8.12、JVM target 1.8。
+- Release 构建有显式签名门禁：若缺少 `key.properties`，只有传入 `-Pvoicing.allowDebugReleaseSigning=true` 才允许本地 release 测试；CI 则注入正式 keystore。
+- Manifest 允许局域网明文 WebSocket，声明网络/WiFi/相机权限；主 Activity 使用 `singleTop`、`adjustNothing`，键盘高度由 native bridge 自行上报。相机是可选硬件，扫码插件注册文件由 Flutter 生成。
+- Android Maven 仓库顺序为 `google()` / `mavenCentral()` / Flutter 官方存储优先，阿里云镜像仅 fallback；本地 Java 路径应写 `android/local.properties`，不得提交。
+- Flutter/Android 子目录 `.gitignore` 包含生成产物、IDE、签名材料和 local.properties；Gradle wrapper 与 GeneratedPluginRegistrant 虽匹配子目录忽略规则，但已作为历史生成文件被 Git 跟踪，修改时应优先由 Flutter/Gradle 工具再生成，而非手工维护。
+- 启动图、主题和 adaptive icon XML 均是标准 Flutter/Android 资源；亮色 splash 为白色、暗色 splash 随系统暗色背景，launcher adaptive background 为 `#1A1A2E`。
+
+### Android 业务代码（基础模块与 UI 前半）
+
+- `main.dart` 主要负责 Material 3 UI、菜单/动画、扫码视图、键盘 inset 布局与用户确认；网络/发送/持久化状态集中在 `VoicingConnectionController`，修改时应保持这一分层，避免把连接逻辑重新塞回 Widget。
+- `AppTheme` 集中维护 4px 间距体系、颜色和文字样式；现有 UI 使用深色主题。界面改动应复用 token，避免新增散落 magic numbers/颜色。
+- `SavedServer` schema v1 保存 device_id、主 IP、候选 IP、端口、名称、系统和最近连接时间；同设备重扫合并候选池并保持主 IP 优先，legacy 无 device_id 数据允许升级合并，持久化落在 SharedPreferences 的单一 JSON key。
+- `VoicingProtocol` 保留 UDP discovery 常量/解析器用于兼容与契约，但当前公开流程是 QR-only；WebSocket 客户端消息为 text/ping，服务端消息为 connected/ack/pong/sync_state/sync_disabled，text 含 auto_enter 与 submit/shadow/commit。
+- `VoicingWebSocketConnector` 在 Android 优先走 MethodChannel/EventChannel 的 native WiFi-bound WebSocket，非 Android 或关闭偏好时才走 Dart `IOWebSocketChannel`；native sink 的发送必须等待 Kotlin 返回 true，close 是 best-effort，连接 generation/pending event 由 id 映射隔离。
+- UI 初始化时注册 lifecycle observer、controller listener、native IME inset EventChannel 和 QR scanner；菜单预绘用于规避首次绘制卡顿，扫码前先收键盘并等待 280ms，扫码器进入后还设 1 秒稳定窗口再锁定 QR。
+- 手机端输入框 `TextInputAction.send` 直接调用 controller `sendText()`；“自动 Enter”只是 controller 状态开关，发送语义不能在 UI 层另行实现。
+
+### Android 扫码与连接状态机（已读部分）
+
+- QR UI 先校验 `type=voicing`、`v=1`，对非 Voicing、版本不兼容和损坏 payload 分别提示；相机权限/设备错误可退回手动 IP。二维码角点会从 capture 坐标映射到预览 cover 坐标，并以 CustomPainter 做待机、锁定、成功/失败动画。
+- Controller 对每次扫码使用 `_qrPairingGeneration` 取消旧异步流程；按 QR 候选 IP 顺序逐个做 3 秒 WebSocket probe，收到 connected 后发送 `ping(source=qr_scan)`，只有收到 pong 才视为连通。
+- 扫码成功后先确认是否替换不同 `device_id` 的现有设备；用户确认后才保存与重连。保存同设备时合并旧候选 IP，且新连接成功 IP 保持主地址优先。这个“probe → 用户确认 → save → force reconnect”顺序是防止错误替换和候选池污染的关键不变量。
+- QR probe 与正式连接都优先 Android native WiFi-bound channel；subscription、timeout 和 probe channel 在 finally 中清理，generation 变化或退出扫码模式会终止旧结果回写。
+
+### Android 正式连接、恢复与发送语义
+
+- App 初始化只加载 Auto Enter 与 `saved_server`；没有保存设备时明确保持 disconnected，不启动 UDP 自动发现。保存设备后按 `candidateIps` 逐一以 2 秒超时连接，全部失败才进入 3/6/12…最多 30 秒退避。
+- 每次连接递增 `_connectionGeneration`，旧 socket 的 message/error/done 回调必须先比对 generation；前台恢复使用 12 秒快速窗口、500ms 重试和 2 秒连接超时，并可暂时保持“已连接”显示，成功 connected 后结束恢复窗口。
+- 心跳每 15 秒发 ping，30 秒无 pong/sync state 即判死；connected 消息会校验/补全保存设备身份、提升当前成功 IP 为主 IP并持久化，若服务端 device_id 与已保存身份冲突则拒绝更新元数据。
+- 手动 submit 只在 connected 且 sync enabled 时发送；若当前文本已通过 shadow 增量完整发送，则手动提交会进入 finalize，避免重复发送内容。
+- 语音 composing 结束时只发送相对 `_lastSentLength` 的 shadow 增量，发送成功后才推进长度；700ms 静默后 finalize。Auto Enter 关闭时本地记录并清空，开启时发送空 content 的 commit 并等待桌面 ACK 决定是否清空。
+- 服务端 ACK 的 `clear_input=false` 会保留手机文本；字段缺失则为兼容旧服务端默认清空。发送或 ping 异常会进入统一断连/重连路径。最近发送历史最多 20 条，撤回按历史向前遍历。
+- Controller `dispose()` 会取消所有 timers/listener、递增 generation 并关闭 channel；后续修改连接路径必须继续保持 timer、subscription、generation 和 native channel 的成对清理。
+
+### Android native bridge 与测试边界
+
+- `MainActivity.kt` 提供两个 EventChannel（network events、keyboard insets）和一个 MethodChannel（connect/send/close）。IME inset 通过 `WindowInsetsAnimationCompat` 逐帧换算为 dp，Flutter 主界面配合 `adjustNothing` 自行移动输入区。
+- Native WebSocket 从 `ConnectivityManager.allNetworks` 中选择 `TRANSPORT_WIFI + NOT_VPN` 网络；若目标是 IPv4，会优先选择其 link subnet 能覆盖目标地址的 WiFi，否则取首个物理 WiFi fallback。OkHttp 同时绑定该 Network 的 socketFactory 和 DNS。
+- Kotlin 侧用并发 map 持有 connection，事件切回 main thread；Flutter EventSink 尚未监听时先排队，close/failure 后移除连接、cancel socket、关闭 dispatcher 并清空 connection pool。修改 native 桥接必须完整安装 APK 验证，hot restart 不足以覆盖 Kotlin/Manifest/Gradle。
+- Android 现有测试覆盖恢复策略、saved_server 序列化/迁移/同设备候选合并、共享协议契约、native WebSocket close 行为；没有直接覆盖 1164 行 controller 的扫码 probe、generation、shadow/commit/ACK 和候选轮询，也没有 Kotlin instrumentation/unit test，因此这些路径变更需要增加 Dart controller 测试并做真机端到端验证。
+- `connection_recovery_policy_test.dart` 仍保留 UDP 命名与旧策略测试，说明兼容代码尚未清理；不要仅因当前 UI 为 QR-only 就删除 UDP contract/解析器或测试，除非明确做协议兼容性迁移。
+
+### PC 平台基础层与输入入口
+
+- PC 运行依赖固定到兼容小版本：Pillow 12.2、websockets 12、PyAutoGUI 0.9.54、pyperclip 1.11、PyInstaller 6.19、PyQt5 5.15.11、qrcode 8、psutil 7.2。macOS spec 构建无 Dock 图标的 `LSUIElement` app bundle，bundle id 为 `com.kevinlasnh.voicing`。
+- `device_identity.py` 在平台数据目录的 `device.json` 维护 UUID hex device_id，采用 `.tmp` + replace 原子写入；设备名优先配置值再回退 hostname，`darwin` 对外协议名映射为 `macos`。
+- `platform_autostart.py` 分别使用 Windows Run registry、macOS LaunchAgent、Linux GNOME autostart `.desktop`；源码模式启动命令是当前 Python + `voice_coding.py`，frozen 模式是可执行文件本身。
+- 单实例：Windows 用 named mutex，macOS/Linux 用数据目录 `voicing.lock` + `fcntl.flock`；重复启动时显示原生/Qt 提示。
+- `platform_utils.py` 统一平台数据/日志目录、默认热点地址、Wayland 判断和 RemoteDesktop portal 能力探测；frozen app 调用 `gdbus` 等系统工具时必须使用 `system_subprocess_env()` 清除 PyInstaller 污染的 `LD_LIBRARY_PATH`。
+- PC 协议 builder 与 Android 常量一致，并额外负责 QR payload、connected/ack/sync 消息构造。`network_recovery.py` 仍保留 UDP 广播 payload 和接口变化辅助，属于兼容/测试代码。
+- `platform_keyboard.py` 是所有文本注入的唯一平台层：Windows/macOS/X11 使用 pyautogui/原生 Enter，GNOME Wayland 使用 RemoteDesktop portal；`type_text_at_cursor()` 负责保存剪贴板与 PRIMARY、写入、粘贴、可选 Enter，并在 `finally` 中恢复。
+- Wayland clipboard 优先 `wl-copy`/`wl-paste`，外部命令同样必须使用清理后的系统环境；粘贴模式为 Auto/Normal/Terminal/Compat，当前 AT-SPI 采样参数为 500ms 窗口、40ms 间隔、最多 8 样本，terminal fallback cache 为 3 秒。
+
+### PC GNOME Wayland portal 与焦点判定
+
+- `RemoteDesktopPortalKeyboardBackend` 以线程锁保护单例 session，依次执行 CreateSession → SelectDevices(KEYBOARD uint32) → Start；每个 portal request 通过唯一 handle_token 监听异步 Response，默认 60 秒超时。任何拒绝、超时或键盘事件错误都会抛错，键盘事件错误还会清空 session 以便下次重建。
+- PyQt5 会把普通 Python int 序列化为 D-Bus `i`，portal 的 `types/state` 必须通过 `_dbus_uint()`/variant 强制为 `u`；这类 typed argument 不可简化回普通 int。
+- Wayland 发送序列严格成对释放 modifier：Normal=`Ctrl down,V down,V up,Ctrl up`，Terminal 再包 Shift，Compat=`Shift+Insert`，Enter 单独 down/up。任何修改都必须验证 press/release 顺序和异常后的 modifier 释放风险。
+- Auto 模式先取最多 8 个 AT-SPI 样本，terminal/normal 计票、uncertain 不计票；terminal 多则缓存并走 Ctrl+Shift+V，normal 多则清缓存并走 Ctrl+V，平票只在 3 秒内近期 terminal 命中时走 terminal，否则 normal。
+- AT-SPI 优先当前 Python 进程的 `gi.repository.Atspi`，不可用时启动系统 Python；system helper 会在单个进程内批量采样，避免每个样本重复启动解释器。focused 为 shell/desktop/空 app 时会扫描 ACTIVE accessible fallback。
+- 终端名单、焦点扫描逻辑和采样常量在主进程代码与内嵌 system-Python helper 中有重复实现；增删终端、修改 fallback 或采样策略时必须同步两份并扩展 `test_platform_keyboard.py`。
+- Windows Enter 优先 Win32 `SendInput`，失败才回退 pyautogui；不要把普通平台输入路径与 Wayland portal session 混在一起。
+
+### PC 主程序：网络发现与 WebSocket 输入入口
+
+- `voice_coding.py` 当前 `APP_VERSION=2.9.9`，全局 `AppState` 用 `threading.Lock` 保护 connected clients、实际绑定 IP 与 server loop，并以 Qt signal 把 WebSocket 线程的 QR probe 成功事件送回 UI。
+- 网络枚举优先 psutil，fallback 为 Windows PowerShell JSON、Linux `ip -j -4 addr`、macOS `ifconfig`；只接受 private、非 loopback/link-local/multicast、prefix 1—30 且非 VPN/虚拟网卡的 IPv4。
+- 排序规则优先 Windows hotspot `192.168.137.*`，再按 Ethernet/WiFi/unknown 与平台 hotspot 前缀；macOS 不假设 `en0/en1` 的固定角色。接口快照每次刷新记录候选，QR 在 server 已启动后优先发布实际绑定成功 IP。
+- `type_text()` 是 WebSocket handler 的 bool 语义适配层：sync 关闭或空文本直接 false，真正注入成功才 true；`press_enter_after_settle()` 独立用于空 commit。
+- WebSocket 收到 text 时先检查 sync；submit 的 auto_enter 随粘贴执行，shadow 文本只注入不清手机输入，commit 只按 Enter。ACK `clear_input` 仅在 submit 注入成功或 commit Enter 成功时为 true，阻塞桌面注入始终通过 `asyncio.to_thread()` 脱离 event loop。
+
+### PC server 生命周期与托盘/QR 前端（已读部分）
+
+- QR scan probe 的 ping 会通过 Qt signal 触发桌面 QR 成功态；普通 ping 返回带当前 sync state 的 pong。非 JSON 消息仍作为 legacy plain text 输入处理，但不会回 ACK。
+- sync 开关广播必须通过 `asyncio.run_coroutine_threadsafe()` 调度到 `state.server_loop`，不能从 Qt 线程直接 await/操作 WebSocket event loop。
+- server 为每个物理候选 IP 分别创建 listener；全部绑定失败时清空 bound IP、每 2 秒重试；监听期间每 1 秒刷新接口集合，变化即关闭全部旧 listener 并按新地址重建。QR 只在 listener 存在时使用 bound hosts。
+- Windows/macOS 自定义 Fluent menu 包含 QR、sync、paste mode、autostart、日志、退出；sync 切换同时更新图标、关闭菜单并广播状态，paste mode 按 Auto→Normal→Terminal→Compat 循环。
+- 自定义 Popup 菜单宽度强制收紧到 sizeHint，并补偿阴影 margins 与平台展开方向；Windows 连续右键托盘图标有专门的关闭后重开处理。UI 布局与这些坐标补偿耦合，调整 margins/高度时要同步验证定位。
+- QR dialog 固定 282×308、QR 230，直接居中出现而不做跨窗口飞入；payload 每 5 秒刷新，包含 device identity、实际监听 IP 池和端口。二维码 pixmap 按 payload 缓存，成功 overlay 与 close/focus generation 防止旧动画回写。
+
+### PC 主程序收尾与共享协议
+
+- QR 成功态播放一次后约 1150ms 直接关闭；成功/关闭期间忽略 focus-out，普通状态点击窗口外才关闭。Linux 预热 QR 时只 polish/layout，不 `show()`，避免 Wayland 左上角黑闪。
+- Linux 托盘强制使用系统原生 `QMenu`：右键完全交给 `setContextMenu` 宿主，左键/双击手动 popup；Windows/macOS 才用自定义 Popup。两套菜单共用 `ModernMenuWidget` 的业务 action，并在显示前同步 sync/paste/autostart 状态。
+- 托盘图标预生成 normal/dim/paused 三态并缓存，`_current_icon_key` 去重 `setIcon`；200ms timer 只切等待连接的亮暗状态，Linux SNI/AppIndicator 下不可恢复无条件 setIcon。
+- 主入口顺序为 logging → runtime/portal 能力检查 → 初始网络接口刷新 → daemon WebSocket thread → Qt tray loop；生产模式先做单实例检查，`--dev` 明确跳过，适合本地热重启。
+- 共享 protocol contract 固定 TCP 9527、历史 UDP 9530、QR v1/type voicing、text/ping 与 connected/ack/pong/sync_state/sync_disabled 的字段集合。任何字段增删都必须同步 JSON contract、Python builder/constants、Dart constants/parser 及两端契约测试。
+
+### PC 测试覆盖（第一组）
+
+- 单元测试通过临时目录验证 device_id 创建/复用/名称与 macOS 映射，自启 `.desktop` 写入/删除与路径空格转义，UDP legacy payload/interface change，以及平台命令 IP 解析。
+- `test_voice_coding_server.py` 明确锁定核心 ACK 不变量：注入失败不清手机文本；commit Enter 成功才 clear，失败保留。修改 handler 或 ACK builder 时这些测试必须继续通过。
+- 网络接口测试覆盖 Windows/Linux/macOS 解析、VPN/Tailscale/link-local//31//32 过滤、hotspot 排序、psutil 路径、运行时替换旧接口、QR bound hosts 优先但不隐藏 fresh candidate pool。
+- 平台工具测试覆盖三平台数据目录、Wayland portal allow/block、AvailableDeviceTypes keyboard bit、gdbus uint 解析和 PyInstaller `LD_LIBRARY_PATH` 修复；修改打包态系统子进程环境时必须运行这一组。
+
+### PC 键盘/Wayland 测试覆盖
+
+- `test_platform_keyboard.py` 直接锁定 macOS/普通平台快捷键、Wayland portal dispatch、剪贴板与 PRIMARY 在成功/失败时恢复、Auto Enter 延迟、portal session 三步流程与 D-Bus uint 类型。
+- 键序列测试覆盖 Normal/Terminal/Compat/Enter 的精确 press/release 元组，portal event 错误必须清 session；Wayland `wl-copy`/`wl-paste` 和 system Python AT-SPI 都必须使用 `system_subprocess_env()`。
+- Auto 投票测试覆盖 terminal/normal 多数、平票近期 terminal cache、全 unresolved 默认 normal、normal 明确信号清 cache、500ms/8 样本窗口、shell focused → active terminal/normal fallback。
+- 测试同时覆盖 clipboard backend fallback 与 Windows SendInput→pyautogui fallback。修改 `platform_keyboard.py` 时应至少单跑该文件，再跑全 PC suite；涉及 GNOME Wayland 仍需实机 portal/terminal/普通窗口验证。
+
+### PC 其余测试与二进制资源
+
+- PC protocol contract 测试检查端口、消息类型/字段、ACK clear_input、QR required/optional 字段与版本；tray 测试在 `QT_QPA_PLATFORM=offscreen` 下覆盖 Linux 右键不双弹、左键/双击 popup、自定义菜单无分隔/宽度、paste mode 循环、QR 直接居中和 sync 广播使用 server loop。
+- 仓库共有 14 个二进制文件：10 个 Android launcher PNG、Android/PC 各 1 个 1024×1024 RGBA 源图、1 个 6-size Windows ICO、1 个 Gradle wrapper JAR；均可被 `file` 正常识别并已记录 SHA-256。
+- Android foreground PNG 尺寸按 mdpi→xxxhdpi 为 108/162/216/324/432，legacy mipmap launcher 为 48/72/96/144/192；源图和 PC 图标源均为 1024×1024 RGBA，但摘要不同，不能假定可互换。
+- `gradle-wrapper.properties` 指向 Gradle 8.12，但现有 `gradle-wrapper.jar` manifest 标记 Implementation-Version 2.10（2015，49 个 class/resource entry）。本次不擅自替换生成物；若未来升级 wrapper，应使用 Gradle wrapper 任务同时重生成 jar/scripts/properties并验证构建，而非只改 distributionUrl。
+
+### PWF 历史复核（中段）
+
+- 补读的历史进度与当前源码一致：Wayland portal、typed D-Bus uint、Linux 原生 QMenu、图标 setIcon 去重、QR 直接居中、native WebSocket await、server-loop sync 广播、terminal paste modes、ACK/clipboard 修复均有对应测试与实机验证记录。
+- 历史记录也明确多次区分“源码/单测已通过”和“仍需 Windows/macOS/Linux/Android 实机肉眼或完整 APK 验证”；仓库级规则应保留这种按改动范围分层验证的表达，不能把 headless/unit 结果冒充平台实机验收。
+
+### 编码、权限与凭据卫生
+
+- 最终分类为 72 个文本文件 + 14 个二进制文件（共 86 个）；此前口头更新中的 71/15 为预估，现已按 MIME 逐文件复核纠正。
+- 72 个文本文件全部可按 UTF-8 解码，未发现 CRLF；仅 `android/voice_coding/android/app/src/main/res/values/colors.xml` 缺少文件末尾换行。本次不改无关资源格式。
+- 工作树没有软链接，也没有 Git mode 100755 文件；因此 `android/voice_coding/android/gradlew` 当前被跟踪为不可执行，Unix 下直接 `./gradlew` 会受权限影响，日常优先通过 Flutter 命令或显式 `bash android/gradlew`，若修复 mode 应单独验证并提交。
+- 未发现 private-key header、keystore/key.properties/PEM/key 文件或 credential/secret 命名文件；GitHub workflow 仅引用仓库 Secrets，不含明文签名凭据。
+- 根 `AGENTS.md` / `CLAUDE.md` 已由 `.gitignore` 明确忽略；PWF 三件套明确未忽略。`.claude/` 当前属于已跟踪历史例外，仓库级 Agent Markdown 必须显式说明，避免未来误把本机权限或凭据写入其中。
+
+### 仓库级 Agent Markdown 最终结构
+
+- 新建的根 `AGENTS.md` 与 `CLAUDE.md` 已全文同步，H1 同为 `# Repository Agent Markdown`；两份文件属于本地配置，不进入 Git 提交。
+- 配置把本次审查中最值得跨 session 保留的约束集中为八类：仓库定位与目录职责、核心数据流/ACK 不变量、Android 分层、PC/Wayland/托盘平台边界、编辑规则、验证矩阵、Release 同步规则、PWF/Git/凭据卫生。
+- 协议同步清单明确覆盖 JSON contract、Python、Dart 与双端契约测试；Android native 改动明确要求完整重装 APK；Wayland 明确保留 D-Bus uint、成对 modifier、双份 AT-SPI helper 同步和诊断优先原则。
+- Git 规则明确保留根 Agent Markdown 的本地 ignore，同时把现有 `.claude/settings.local.json`、`.claude/skills/pc-hot-restart/` 以及未来成对维护的 `.claude/skills/` / `.agents/skills/` 声明为受控隐藏目录例外。
+- 根 `.gitignore` 当前已满足本任务要求，无需产生额外 diff；最终应提交和推送的只有本次增量更新后的 `task_plan.md`、`progress.md`、`findings.md`。
+- 由于本次不涉及可执行源码，完整 PC/Flutter suite 不提供额外风险覆盖；配置一致性、编码/换行、ignore 命中和 `git diff --check` 是本轮适当验证。
