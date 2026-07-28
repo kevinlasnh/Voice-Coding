@@ -61,6 +61,7 @@ from platform_keyboard import (
     get_paste_mode_label,
     press_enter,
     set_paste_mode,
+    start_wayland_focus_prewarm,
     type_text_at_cursor,
 )
 from platform_utils import (
@@ -94,7 +95,7 @@ from voicing_protocol import (
 # Configuration / 配置
 # ============================================================
 APP_NAME = "Voicing"
-APP_VERSION = "2.9.9"
+APP_VERSION = "2.9.10"
 WS_PORT = WEBSOCKET_PORT      # WebSocket port
 AUTO_ENTER_SETTLE_DELAY_SEC = 0.35
 NATIVE_FONT_FAMILY = get_native_font_family()
@@ -782,7 +783,6 @@ def type_text(text: str, auto_enter: bool = False) -> bool:
             text,
             auto_enter=auto_enter,
             enter_delay_sec=AUTO_ENTER_SETTLE_DELAY_SEC,
-            restore_delay_sec=0.1,
         )
         return True
 
@@ -2107,6 +2107,10 @@ def main():
         logging.error(str(exc))
         show_fatal_message("Voicing 无法启动", str(exc))
         return
+
+    # Read-only warm-up: samples AT-SPI in the background, but never creates
+    # a RemoteDesktop portal session, sends keys, or caches a paste decision.
+    start_wayland_focus_prewarm()
 
     # Detect QR-advertisable interfaces at startup; the server thread refreshes
     # this snapshot at runtime for network changes.

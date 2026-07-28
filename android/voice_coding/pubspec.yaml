@@ -1,7 +1,7 @@
 name: voicing
 description: "Voicing - Phone to PC voice bridge"
 publish_to: 'none'
-version: 2.9.9+10
+version: 2.9.10+11
 
 environment:
   sdk: ^3.5.4

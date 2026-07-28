@@ -1000,6 +1000,77 @@
 ---
 *每个阶段完成后或遇到错误时更新此文件*
 
+## 会话：2026-07-28 CST — 阶段 33 续接与发布前收敛
+
+### 上下文恢复与当前基线复核
+- **状态：** in_progress
+- 已重新完整读取 `planning-with-files-zh` skill，并运行 session catchup；恢复脚本未报告遗漏上下文。
+- 已确认当前目录 `/home/kevinlasnh/Projects/Voicing` 未命中 Second Brain Path Guard，当前 goal 仍为 active，分支为 `main`。
+- 当前未提交业务改动仍为 `.github/workflows/release.yml`、`pc/platform_keyboard.py`、`pc/tests/test_platform_keyboard.py` 与 PWF 三件套；根 `AGENTS.md` / `CLAUDE.md` 保持本地忽略且全文一致。
+- 基线验证结果：
+  - `.venv/bin/python -m unittest pc.tests.test_platform_keyboard`：55 tests OK。
+  - `.venv/bin/python -m unittest discover -s pc/tests`：115 tests OK。
+  - `git diff --check`：通过。
+- 已确认两份本地 Agent Markdown 中仍有两处过时说明：system helper 已不再重复维护 terminal 名单，阶段 31 的修复也已经实施；发布前需同步更正。
+- 决定补充 GNOME Wayland 启动时只读 AT-SPI 预热：后台采样并记录 readiness，不启动 Portal、不缓存粘贴模式、不发送按键，降低首次真实粘贴才初始化探测链的冷启动成本。
+
+### 启动时只读 AT-SPI 预热
+- **状态：** complete
+- `pc/platform_keyboard.py` 新增 `start_wayland_focus_prewarm()`：仅 GNOME Wayland 创建 daemon thread，后台运行只读焦点采样；worker 只记录脱敏 readiness/votes/sample 元数据，异常不阻断应用启动。
+- `pc/voice_coding.py` 在 runtime 支持检查通过后、网络与 WebSocket 启动前触发预热；该路径不会实例化 RemoteDesktop Portal backend、不会发送按键，也不会缓存后续粘贴模式。
+- `pc/tests/test_platform_keyboard.py` 新增非 Wayland 跳过、daemon thread、脱敏日志和非致命失败测试；`pc/tests/test_voice_coding_tray.py` 新增启动顺序测试。
+- 真实 Wayland 预热线程验证：6/6 样本均为当前 ACTIVE Chrome，`readiness=ready`，线程正常结束，`portal_backend_created=False`。
+- 验证结果：
+  - 键盘专项：59 tests OK。
+  - 托盘/启动专项：13 tests OK。
+  - 完整 PC suite：120 tests OK。
+  - `py_compile` 与 `git diff --check`：通过。
+
+### 发布配置、版本点与 Android 工具链复核
+- **状态：** in_progress
+- 已完整读取仓库根 Agent Markdown 和 Release workflow 的 Linux/发布段，确认验证矩阵、tag 发布顺序和 Release 资产清单。
+- 已确认 Linux runner 与 DEB 控制文件均已加入 AT-SPI、system Python GI 和 `wl-clipboard` 依赖。
+- 已定位 v2.9.10 需要同步的版本点：PC `APP_VERSION`、Android `pubspec.yaml`、CHANGELOG、根 README 版本徽章/tag 示例，以及四份中英文使用文档中的 Wayland Auto 语义。
+- 当前 `flutter` 不在 PATH，历史固定 SDK 路径也不存在；正在继续定位本机 Flutter/JDK 17 工具链。
+
+### v2.9.10 版本、文档与 Linux 产物
+- **状态：** in_progress
+- 已同步 PC `2.9.10`、Android `2.9.10+11`、CHANGELOG、根 README 徽章/tag 示例，以及根/Android 中英文 Wayland Auto 行为说明。
+- 新文档明确：Auto 只依据当前 ACTIVE 窗口的可靠证据发送 Ctrl+V 或 Ctrl+Shift+V；unresolved/冲突时不发快捷键，并通过失败 ACK 保留手机文本。
+- 根 `AGENTS.md` / `CLAUDE.md` 已同步修正 helper/terminal 名单和阶段 31 的过时说明；两份 SHA-256 一致，H1 正确，仍保持本地 ignore。
+- 使用 `.venv` PyInstaller 6.19.0 完成 Linux onefile 构建，生成 59 MiB x86-64 ELF； standalone 副本摘要与原始 `Voicing` 一致。
+- 首次按旧 workflow 方式构建 DEB 时发现包内容为 `kevinlasnh/kevinlasnh` 且 desktop 文件受 umask 成为 0664；已修改 workflow 固定元数据 0644，并使用 `dpkg-deb --root-owner-group`。
+- 修复后本地 `voicing-linux-amd64.deb` 为版本 2.9.10、amd64，依赖包含 AT-SPI/Python GI/`wl-clipboard`，内容全部 `root/root`，可执行文件 0755、desktop/icon 0644。
+- 发布链路复查发现 `voice_coding.type_text()` 仍显式传入 `restore_delay_sec=0.1`，覆盖了平台层新增的 Wayland 350ms 默认值；已删除该覆盖，使真实 WebSocket 路径按平台选择等待时间。
+- 新增平台层 Wayland 默认恢复延迟测试与 server 调用契约测试；键盘专项现为 60 tests OK，server 专项 4 tests OK，`py_compile` / `git diff --check` 通过。由于此修复发生在首次 PyInstaller 构建后，最终发布前必须重建 Linux binary/DEB。
+
+### Android 本地工具链恢复
+- **状态：** in_progress
+- 已安装 OpenJDK 17.0.19 与 aria2；未执行 `apt autoremove` 或删除其他系统包。
+- 从官方地址下载并校验 Flutter 3.27.0 archive（MD5 `eb98aed421434e23be8869e66ea9db70`）与 Android command-line tools 12.0（ZIP integrity 通过）。
+- Flutter 安装到 `/home/kevinlasnh/development/flutter-3.27.0`，Android SDK 根为 `/home/kevinlasnh/Android/Sdk`；已关闭 Flutter analytics 并接受 Android SDK licenses。
+- 正在安装 API 35 platform/build-tools、platform-tools 与项目锁定的 NDK `27.0.12077973`。
+- Android toolchain 最终由 `flutter doctor -v` 确认为 API 35、Build Tools 35.0.0、JDK 17、licenses 全部可用；Android Studio 与 Linux desktop clang/GTK 警告不影响 APK 构建。
+- `flutter analyze --no-fatal-infos --no-fatal-warnings`：退出码 0，仅 4 条既有 `withOpacity` info。
+- `flutter test`：24 tests passed。
+- `flutter build apk --debug`：成功，版本名 2.9.10、versionCode 11，APK 签名验证通过。
+- `flutter build apk --release -Pvoicing.allowDebugReleaseSigning=true`：本地测试 release 构建成功，31.7 MB；ZIP 完整性、版本 2.9.10/11 与 v1/v2 签名验证通过。该 APK 使用明确允许的 Android Debug 证书，仅用于本地编译验证；正式 GitHub Release 仍由 CI Secrets 签名。
+- Flutter 构建曾自动把已跟踪 `android/gradlew` mode 改为 executable；已恢复原始 0644，未夹带该无关改动。
+
+### 最终自动化与 Linux 产物复核
+- **状态：** complete（真实终端/普通输入框粘贴仍待用户配合）
+- 最终源码重新验证：
+  - `pc.tests.test_platform_keyboard`：60 tests OK。
+  - 完整 PC suite：122 tests OK。
+  - PC `py_compile`：通过。
+  - `git diff --check`：通过。
+- 在最终源码上重新运行 PyInstaller；最终 `Voicing` 与 `voicing-linux-x86_64` SHA-256 均为 `b15426135a60593587a8cb01309bfc2a6dfcda0ae5ff2aa2613e63c9d6c3be98`。
+- 最终 DEB SHA-256 为 `92882486ad4dde80f22bf1b3f371bbb124c0359b3f348e7d4dbd346a310e927d`；包内二进制与 standalone 逐字节一致，版本/架构/依赖、`root/root` ownership 和 mode 均通过。
+- `apt-get -s install` 确认本机可从已安装 2.9.9 升级到本地 2.9.10，所有新增运行依赖已满足；没有实际安装本地包。
+- 最终 frozen smoke 在 offscreen/当前 Wayland 会话成功到达启动、网络枚举与 AT-SPI prewarm；prewarm 返回 ACTIVE Chrome，未创建 Portal。端口 9527 与系统托盘错误来自已运行的 2.9.9 和 offscreen 环境，是本次受控 smoke 的预期限制；timeout 后无最终 binary 残留进程。
+- 普通窗口最终 20 轮压力采样：20/20 decision=normal，每轮 5—6 个可靠样本，全部为 Google Chrome `source=active_window`，0 terminal、0 uncertain。
+- Release workflow YAML 解析通过，v2.9.10 changelog 提取模拟通过；版本点、UTF-8/LF、Agent Markdown 同步/ignore 与无旧公开语义扫描均通过。
+
 ## 会话：2026-07-28 CST — 全仓逐文件审查与 Agent Markdown 初始化
 
 ### 阶段 32：启动与上下文恢复
@@ -1074,3 +1145,87 @@
 - 计划明确禁止 unknown 全局默认为 terminal、禁止 Ctrl+V 与 Ctrl+Shift+V 双发；unresolved 超时改为保留 Android 文本并使用显式粘贴模式降级。
 - 计划包含 13 个执行分支、逐步回滚、权限/数据/依赖风险，以及 10 次干净 GNOME 登录的实机验收门槛。
 - 模板校验通过：无尖括号或省略号占位；所有可逆性和风险等级字段合法；`git diff --check` 待提交前统一执行。
+
+## 会话：2026-07-28 CST — Ubuntu 22.04 GNOME Wayland 终端识别稳定性修复与 v2.9.10 发布
+
+### 阶段 33：启动与证据恢复
+- **状态：** in_progress
+- 用户要求全面修复终端/非终端自动识别不稳定、terminal 中误发 Ctrl+V 并粘贴图片的问题；必须反复修复和测试，最终记录进度、推送并触发新的 GitHub Actions Release，全部资产成功后才能完成目标。
+- 已归一化仓库路径为 `/home/kevinlasnh/Projects/Voicing`，未命中 Second Brain Path Guard；已完整读取仓库 Agent Markdown 与 `planning-with-files-zh` skill，并运行 session catchup，未报告未同步上下文。
+- 启动时 `main` 与 `origin/main` 同步，已跟踪工作区干净；仅根 `AGENTS.md` / `CLAUDE.md` 作为忽略的本地配置存在。
+- 已恢复阶段 31 的诊断优先结论：不能把 unknown 粗暴映射成 terminal、不能双发快捷键；应先区分 classifier、portal modifier 与 clipboard 根因，并在 unresolved 时保留 Android 文本。
+- 已建立六步执行计划：实证基线 → 全链路审查 → 修复与测试 → Ubuntu Wayland 重复验证 → 版本/文档/推送/tag → Actions/Release 资产核验。
+- 已确认当前实机环境为 Ubuntu 22.04 + GNOME Shell 42.9 + Wayland，系统 AT-SPI 依赖可导入；已安装应用仍为 v2.9.9。
+- 已检查当日 Voicing 日志：当前版本完全缺少焦点样本、helper 状态、AUTO 决策和 portal 键事件诊断，无法从历史日志裁决现场故障分支。
+- 已确认本机未安装 `wl-clipboard`、`xclip` 或 `xsel`；后续将把 clipboard backend 与文本写入成功纳入验证，避免旧图片剪贴板干扰判断。
+- 已完整阅读 `platform_keyboard.py` 的剪贴板、portal、AUTO 投票、AT-SPI 主进程/system helper 与键序列实现，确认至少五个需要修复的边界：无 unresolved 状态、全 None 不 fallback、DFS stale focused 风险、首次 portal 前后证据丢失、键序列异常不补偿释放。
+- 已完整阅读 576 行 `test_platform_keyboard.py` 与 Linux release/deb 配置，确认现有测试固化了 unresolved→Ctrl+V 和普通 focused 不查 ACTIVE 的旧行为，且 deb 未声明 AT-SPI 与 `wl-clipboard` 运行依赖。
+- 已在当前真实 AT-SPI desktop tree 中复现跨应用 stale FOCUSED：钉钉仍标记 focused，而另一个窗口才标记 active；现有扫描器选择了钉钉并判 NORMAL。根因已从“可能”提升为实机确认。
+
+### 阶段 33：第一轮实现
+- **状态：** in_progress
+- 已在 `pc/platform_keyboard.py` 实现 ACTIVE-window-first 扫描骨架：过滤 GNOME Shell/portal，按非 shell ACTIVE 应用选定目标，只在该 ACTIVE 子树内使用 focused 控件；跨应用多 ACTIVE 或无可靠 ACTIVE 时返回带原因的 unresolved。
+- 已引入内部 terminal/normal/unresolved 三态与最小可靠票数/票差门槛，取消全 uncertain 自动退化为 Ctrl+V；超时 unresolved 会抛出输入失败，沿现有 ACK 语义保留手机文本。
+- 已为首次 portal session 增加授权前/授权后两阶段识别与冲突 reconciliation；可靠 pre + post unresolved 可保留 pre，可靠结果冲突则安全取消。
+- 已增加不含用户正文的 attempt 级日志：clipboard backend/文本长度、焦点样本 app/role/source/reason、投票、最终模式和 portal sequence。
+- 已为 portal 部分键序列失败增加已按下按键的 best-effort 释放，并在失败时清 session。
+- 已将 Wayland clipboard 改为要求 `wl-clipboard`，复制后回读校验；旧 clipboard 文本读取失败时不再错误恢复为空字符串，默认恢复等待提升到 350ms。
+- `python3 -m py_compile pc/platform_keyboard.py` 已通过。
+- 第一轮实机只读采样验证：修复后连续 5 个样本全部稳定选择真实 ACTIVE 的 Google Chrome frame，未再混入此前 stale 的钉钉 focused；投票为 normal 5、terminal 0、uncertain 0。
+- 第一轮运行 `python3 -m unittest pc/tests/test_platform_keyboard.py` 时，45 项均因旧测试 `setUp()` 调用已移除的 terminal cache API 而失败；这是测试契约尚未迁移，不是运行代码导入失败。已记录并进入测试重写阶段，不重复运行同一旧测试。
+- 已把 `test_platform_keyboard.py` 扩展到 52 项，覆盖 ACTIVE-first/stale-focused、三态置信门槛、稀疏/冲突/unresolved、重采样、portal 前后 reconciliation、unresolved 禁止发键、modifier 补偿释放、system helper fallback、clipboard 回读与缺少 wl-clipboard 的安全失败。
+- 测试迁移后的首轮仅剩 1 项失败：只有 `role=terminal` 而 app 为空的有效样本被过早归为 uncertain；已把分类顺序改为“显式 unresolved reason → terminal role/app → shell/空 app uncertain”。
+- 第二轮 `python3 -m unittest pc/tests/test_platform_keyboard.py`：52 tests OK。错误日志中的 portal failure traceback 来自刻意注入的补偿释放测试，测试本身通过。
+- 首轮扩大到完整 PC suite 时共运行 88 项，键盘等已执行测试通过，但 4 个 test module 因系统 Python 缺少 `qrcode` 导入失败；这是依赖环境不足，已记录，下一步创建本地 `.venv` 安装锁定依赖后重跑。
+- 首次 `python3 -m venv .venv` 因 Ubuntu 未安装 `python3.10-venv` / ensurepip 失败；命令留下的仅是忽略目录内局部 venv 骨架，计划安装系统包后用 `python3 -m venv --clear .venv` 安全重建。
+- 已通过 `sudo -n apt-get` 安装 `python3.10-venv` 与 `wl-clipboard`，随后用 `python3 -m venv --clear .venv` 重建隔离环境并成功安装 `pc/requirements.txt` 全部锁定依赖。
+- 使用 `.venv` 重跑完整 PC suite：112 tests OK；覆盖 ACK、网络、协议、托盘、平台层及新增 52 项键盘测试。输出中的 portal traceback 与 offscreen Qt warning 均来自预期测试分支，无失败。
+- 已在与 PyInstaller 相同的“venv 无 gi → `/usr/bin/python3` helper”路径实机验证：in-process 样本为空，system helper 连续返回 5 个真实 ACTIVE 的 Google Chrome frame，最终稳定判 NORMAL。
+- `wl-paste --list-types` 确认当前真实 Wayland clipboard 提供 UTF-8/text MIME，可在不暴露正文的前提下进行写入、回读和恢复验证。
+- 已在进程内保存原文本剪贴板，使用随机 token 执行真实 `wl-copy` → `wl-paste` 相等校验，再恢复原文本并复核相等；`wl_clipboard_roundtrip=ok`。
+- 对普通窗口 helper 路径执行 20 轮连续实机压力采样：20/20 决策为 normal，共 116 个样本全部来自真实 `active_window` 的 Google Chrome，0 个 unresolved reason，未再出现 stale 钉钉或 GNOME Shell 混入。
+- 首次尝试通过 `gnome-terminal` 启动 45 秒临时窗口进行 terminal 压力采样，但 GNOME 的 focus-stealing prevention 没有把前台焦点从 Chrome 转给新窗口，因此 20/20 仍正确判为 Chrome normal；该轮不能作为 terminal 验收证据，已停止复用同一方法。
+- 已确认临时 GNOME Terminal 的 AT-SPI frame 可见且 app 名为 `gnome-terminal-server`，但其 ACTIVE 状态会随桌面焦点时序变化；下一步改用 AT-SPI component focus 或用户真实点击建立可证明的终端前台状态。
+- 继续尝试 AT-SPI frame `grab_focus()` 返回 false；查询 frame action 接口出现 AT-SPI Get 错误，深层遍历 terminal child 的 focus 尝试又超时。已按三次失败协议停止重复自动抢焦点方案，保留后续由用户真实点击终端后执行采样/粘贴验收的门槛。
+- 第二轮代码审查进一步收紧多 ACTIVE 处理：优先 dialog/alert，其次 frame、window；同优先级出现多个真实窗口时返回 unresolved，不按同 app 名盲选。system helper 同步相同逻辑。
+- system helper 不再复制 terminal 名单，helper 只返回 ACTIVE-first 证据，由主进程统一分类，减少双份名单漂移风险。
+- 新增日志隐私测试，确认 app/role/source 可诊断但窗口标题不进入日志；新增 active window 内 terminal 控件识别测试。
+- 第二轮完整 PC suite：115 tests OK。
+
+### 阶段 33：终端实机验收续接检查点
+- **状态：** in_progress
+- 续接后再次执行当前前台只读探测，6/6 个可靠样本均来自 `Google Chrome/frame/active_window`，决策为 normal。
+- 为避免误发，使用“20 轮全部判 terminal 才允许粘贴”的硬门槛进行定时验收；实际 20/20 轮仍为 Chrome normal，因此脚本按设计以 `FAILED_NO_KEYS_SENT` 退出，未改写剪贴板、未创建 Portal 会话、未发送任何按键。
+- 随后启动基于 `/tmp/voicing-terminal-ready-v2910-7f3c` 的用户终端握手，等待约 90 秒未收到标记；已主动中断后台等待进程，没有遗留输入动作。
+- 当前唯一未完成门槛仍是真实 terminal 前台采样与实际 Ctrl+Shift+V 粘贴验收；下一步由用户在空白终端执行就绪 `touch` 命令后再继续，不重复自动抢焦点路线。
+- 在新的 15 分钟后台双场景验收器等待期间，基于当前工作树重跑完整 PC suite：122 tests OK；随后 `py_compile` 与 `git diff --check` 同样通过。
+- 已再次逐段审阅 `pc/platform_keyboard.py` 的完整 diff，确认 pre/post Portal reconciliation、unresolved 零按键、ACTIVE-first/system helper 同步、clipboard 回读与恢复、modifier 逆序补偿和隐私日志之间没有发现新的发布阻断。
+- 发布物一致性审计发现根中英文 README 仍写旧的约 21 MB APK 体积，而本地 v2.9.10 release APK 为 31.7 MB；已同步修正为约 32 MB，并全仓搜索确认其余 `2.9.9` 命中均为 PWF/CHANGELOG 历史记录。
+- 后台双场景验收器连续跨三个目标回合都未收到用户在真实终端创建的 sentinel；为避免其稍后意外触发输入，已主动发送中断并确认进程以 130 退出，期间未创建 Portal 会话、未改写剪贴板、未发送按键。
+- 当前所有可自动完成的代码审查、122 项 PC 测试、Android 测试/构建、Linux 构建、版本/文档/工作流与发布物审计均已完成；唯一剩余前置条件是用户参与的真实 Wayland terminal/normal 双场景验收。按目标三次阻塞协议，本轮在此标记 blocked，不提交、不 push、不打 tag。
+
+### 阶段 33：Ghostty `Unnamed/frame` 实机根因与第三轮修复
+- **状态：** in_progress
+- 用户恢复目标并在真实终端触发新握手后，20/20 轮样本都稳定为 `Unnamed/frame/active_window`，决策均为 normal；全通过门槛正确输出 `FAILED_NO_KEYS_SENT`，没有创建 Portal 会话、写剪贴板或发送按键。
+- 在用户停止操作后对同一 ACTIVE frame 进行只读身份诊断：AT-SPI PID 对应的 `/proc` `exe`、`comm`、`cmd0` basename 均为 `ghostty`，toolkit 为 GTK 4.14.5；子树仅 13 个节点（1 个 frame、12 个 panel），没有 FOCUSED、EDITABLE 或 terminal 角色。
+- 根因由“焦点不稳定”进一步收敛为 Ghostty 的可访问性身份缺失：其 AT-SPI app name 为 `Unnamed` 且没有可用于分类的 terminal role。下一步新增只读取可执行文件 basename 的 `process_name` 身份信号，并同步主进程与 system-Python helper、补测试后重跑实机压力验收。
+- 已实现 `process_name` 第三身份：主进程和 system helper 都从 AT-SPI PID 仅解析 `/proc` 可执行 basename；统一分类器同时检查 app/process，`Unnamed` 且无 process 时改为 uncertain，避免再次默认 Ctrl+V；日志只新增安全 basename，不记录 PID、参数、标题或正文。
+- 新增 7 条回归，覆盖 helper 字段归一化、PID 到 basename、application PID fallback、`Unnamed+ghostty` terminal、无进程身份 unresolved、明确普通进程 normal 与日志隐私；键盘专项现为 67 tests OK。
+- 当前真实 Ghostty ACTIVE 现场中，in-process 与 venv→system helper 两条路径均返回 `Unnamed/process=ghostty/frame/active_window`；最终连续 20/20 轮全部判 terminal，每轮 5–6 个 terminal 票、0 normal、0 uncertain。
+- 完整 PC suite 已提升为 129 tests OK；`py_compile` 与 `git diff --check` 同时通过。
+- 使用持久 `QCoreApplication` 模拟真实产品生命周期后，普通 Chrome 空文本 Portal 验收成功：pre/post 均 5 个 normal 票，最终 `portal_sequence=ctrl_v`，Ctrl/V 4 个事件全部成对完成，剪贴板恢复 MATCH。
+- 通过 Ghostty 标准 D-Bus application `Activate` 聚焦现有窗口后，终端空文本 Portal 验收成功：pre 4 个、post 5 个 terminal 票，最终 `portal_sequence=ctrl_shift_v`，Ctrl/Shift/V 6 个事件完整按下/释放，剪贴板恢复 MATCH。
+- 已启动专用 Ghostty proof 窗口并确认 ACTIVE 判 terminal；第二个独立非空 Portal 会话在 `Start` 授权处超时，未发送任何键，proof 未生成。该失败是重复新建授权会话的验收编排问题，不推翻前一会话已取得的真实 terminal 键序列证据。
+- 为无人值守授权临时安装 Ubuntu 官方 ydotool，并在每次发送前确认 Portal modal 期间没有非 Shell ACTIVE 窗口；500ms Enter、2s Enter、`Space→Tab→Enter` 三种方式均未使 GNOME 42 chooser 返回，已按三次失败协议停止。ydotool 已卸载，专用 Ghostty 窗口和精确 `/tmp` 标记已清理，未执行 autoremove，未留下 core/proof。
+- 已停止本机运行中的 Voicing 2.9.9 scope 并重启用户级 portal 服务，清除其唯一陈旧 session，同时释放 9527；该旧版后续不自动重启，避免干扰最终 frozen smoke。
+- process identity 修复后的 PyInstaller binary 已重建；首轮新 DEB 检查发现当前 umask 令目录 mode 为 0775。workflow 现新增对 package root 全部目录显式 `chmod 0755`，不再依赖 runner umask，进入重新打包。
+
+### 阶段 33：最终本地发布验收
+- **状态：** complete（等待提交、tag 与 GitHub Actions）
+- 已确认验收现场无 Voicing/frozen harness 残留进程、无 9527 监听、无可见 Portal session；旧版 2.9.9 未重新启动。
+- 已将根中英文 README 与 `CHANGELOG.md` 补充为最终行为：Ghostty 的通用 `Unnamed` AT-SPI frame 使用当前 accessible 进程的可执行文件 basename 识别，分类与日志不读取窗口标题或剪贴板正文；DEB 权限明确为目录/可执行文件 0755、元数据/图标 0644。
+- 已同步本地忽略的 `AGENTS.md` / `CLAUDE.md`，锁定 `process_name` 隐私边界、主进程/helper 同步规则与 DEB mode 约束；两份 SHA-256 均为 `354f279cfebcf9a5dea47090a8b4688b6403a7da19372d3413354cff14166c7d`，内容完全一致。
+- 最终 Linux standalone `pc/dist/Voicing` 与 `pc/dist/voicing-linux-x86_64` 完全一致，SHA-256 均为 `e687dc9d8bc27b964c88132d13395706a3773bbf27fae8635e032422644c1382`。
+- 最终 `pc/dist/voicing-linux-amd64.deb` SHA-256 为 `0a9169e479f3f1c63f4b6ae4a6756b144441cbc15b590845a50da5dada1f7573`；版本 2.9.10、amd64，Depends 包含 AT-SPI/Python GI/`wl-clipboard`，包内 owner 全为 root/root，目录与二进制 0755、desktop/icon 0644。
+- 最终发布前验证重新执行：完整 PC suite 129 tests OK；PC `py_compile` 通过；Flutter analyze 0 问题；Flutter test 24 tests passed；Release workflow YAML 成功解析出 6 个 jobs；`git diff --check` 通过。
+- 本轮实机门槛已判定完成：普通 Chrome 20/20 为 normal，真实 Ghostty 修复后 20/20 为 terminal；两侧真实 Portal 分别发送完整 `ctrl_v` 4 事件与 `ctrl_shift_v` 6 事件，所有 modifier 释放且 clipboard restore 均 MATCH。无人值守非空 proof 因 GNOME 42 授权 chooser 无法安全自动确认而停止，不再重复该失败路线。

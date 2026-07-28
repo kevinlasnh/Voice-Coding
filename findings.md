@@ -436,3 +436,120 @@
 - Git 规则明确保留根 Agent Markdown 的本地 ignore，同时把现有 `.claude/settings.local.json`、`.claude/skills/pc-hot-restart/` 以及未来成对维护的 `.claude/skills/` / `.agents/skills/` 声明为受控隐藏目录例外。
 - 根 `.gitignore` 当前已满足本任务要求，无需产生额外 diff；最终应提交和推送的只有本次增量更新后的 `task_plan.md`、`progress.md`、`findings.md`。
 - 由于本次不涉及可执行源码，完整 PC/Flutter suite 不提供额外风险覆盖；配置一致性、编码/换行、ignore 命中和 `git diff --check` 是本轮适当验证。
+
+## 2026-07-28 Ubuntu 22.04 terminal 自动粘贴修复：恢复基线
+
+- 当前 `main` 为 `f53b198`，业务代码仍是 v2.9.9；用户要求本轮最终发布新的 deb 和 apk，因此计划采用下一补丁版本 `v2.9.10`，发布前仍需依据实际改动同步全部版本与文档位置。
+- 阶段 31 的 `.workflows/2026-07-21-175636/` 本地调研目录当前已不存在，但调研综合结论、互斥根因分支和至少 10 次干净 GNOME 登录门槛已持久化在 PWF 与提交 `6fd3902` 中，可作为本轮实现依据。
+- 启动工作区没有用户未提交的源码改动，可以直接从当前 `main` 建立复现与诊断基线。
+- 本轮完成证据不能只依靠现有单测：必须验证日志能够证明最终选择的粘贴模式和 portal press/release 序列，并在实际 GNOME Wayland terminal 与普通窗口中重复验证文本结果。
+
+### 当前系统与日志证据
+
+- 当前机器正是问题目标环境：Ubuntu 22.04、GNOME Shell 42.9、Wayland (`wayland-0`)、Python 3.10.12；本机安装的是 `voicing 2.9.9`。
+- `python3-gi`、`gir1.2-atspi-2.0`、`at-spi2-core` 已安装，系统 Python 可成功导入 `Atspi 2.0`；因此 system-Python helper 理论上可用。
+- 本机没有 `wl-copy` / `wl-paste`、`xclip` 或 `xsel`。当前源码会回退到 Pyperclip；这不是本轮“Ctrl+V 被 terminal 内 TUI 当成图片粘贴”的直接分类根因，但需要继续验证文本写入剪贴板确实成功，避免把旧图片内容与快捷键误判混淆。
+- v2.9.9 当日日志只记录启动、网络和 WebSocket 生命周期，没有任何 AT-SPI raw sample、helper 来源/错误、AUTO 投票结果、最终键序列或 portal 事件信息；现场失败后无法从日志判断是 classifier 选择 Ctrl+V，还是 Ctrl+Shift+V 的 Shift 事件未生效。
+- 现有日志缺口直接印证阶段 31 的诊断优先结论：修复必须让每次 paste attempt 可追踪，但日志不得记录用户实际文本或剪贴板内容。
+
+### 当前源码的确定性缺陷
+
+- `RemoteDesktopPortalKeyboardBackend.paste_from_clipboard()` 先 `_ensure_started()` 再调用 `_resolve_wayland_paste_sequence()`；首次授权后只采“portal Start 之后”的焦点，没有保留授权前用户真实目标窗口证据。如果 portal/桌面壳层在建会话期间改变焦点，首发分类会被污染。
+- `_resolve_auto_paste_mode()` 只返回 terminal/normal 两态：1 个 normal + 7 个 uncertain 会直接判 normal；全 uncertain 且无 3 秒 terminal cache 也会清 cache 并判 normal。该行为会把“没有可靠证据”错误降级为 Ctrl+V，正好能触发 terminal 内 TUI 的图片粘贴处理。
+- `_sample_focus_infos()` 只要 in-process 采样列表非空就直接采用，即使内容全部为 `None`；这种情况下不会尝试可用的 system-Python helper。helper 的异常、超时、非零退出码、stderr 和 JSON 失败也全部静默折叠为空列表。
+- `_find_focused_accessible()` 在整棵 AT-SPI desktop tree 中返回 DFS 遇到的第一个 `FOCUSED` 节点；如果多个应用残留 FOCUSED 状态，它没有先约束到 `ACTIVE` 顶层窗口。只有 focused 结果为 shell/desktop/空值时才扫描 ACTIVE，因此“旧普通窗口 focused + 当前 terminal active”会被明确误判为 normal，而不是 uncertain。
+- portal `_send_key_sequence()` 虽然正常序列成对释放 modifier，但中途任一 D-Bus event 失败就立即抛出，未 best-effort 释放已经按下的 Ctrl/Shift；这不是当前 Ctrl+V 分类主因，却会造成后续输入状态风险，修复时应补偿释放并记录每个 event。
+- 当前 `type_text_at_cursor()` 在复制后没有回读验证 clipboard 是否确实变成待发送文本；在本机缺少 wl-clipboard/xclip/xsel 的环境下，应增加不记录正文的长度/摘要级验证或至少明确 backend/失败诊断。
+
+### 现有测试与发布包缺口
+
+- 现有测试把错误策略固化为预期：`test_auto_paste_mode_treats_unresolved_focus_as_normal_without_terminal_cache` 明确要求全 unresolved 返回 NORMAL，必须改为安全的 unresolved/失败行为并补 readiness 重采样测试。
+- `test_scan_atspi_desktop_does_not_override_normal_focused_app` 明确禁止在“找到普通 focused 节点”后检查 ACTIVE；这会保护 stale-focused 误判。新实现应按 ACTIVE 顶层窗口约束 focused 子树或至少对 focused/active 冲突判 unresolved，而不是继续信任任意 DFS 首项。
+- portal 测试只验证完整成功序列和“错误后 session 清空”，没有验证部分按键成功后的 modifier 补偿释放、attempt 日志或首次 session 前后焦点证据选择。
+- clipboard 测试只验证调用顺序，没有验证 copy 后回读、backend 诊断或复制失败时绝不发送快捷键。
+- Linux deb 的 `Depends` 当前仅有 Qt/XCB 运行库，没有 `wl-clipboard`、`python3-gi`、`gir1.2-atspi-2.0` 或 `at-spi2-core`；这使干净 Ubuntu 22.04 安装不能由包管理器保证稳定分类与 Wayland clipboard 依赖。发布 workflow 也未在构建 runner 安装/验证这些运行依赖。
+
+### 实机 AT-SPI 已复现 stale-focused 根因
+
+- 在当前 Ubuntu 22.04 Wayland 会话直接运行 v2.9.9 的 `_sample_focus_infos_in_process()`，同一轮先后返回钉钉文档、`Unnamed/frame/Voicing` 等不同应用；`_resolve_auto_paste_mode()` 最终为 NORMAL。
+- 枚举整棵 AT-SPI desktop tree 时，同时观察到：钉钉应用存在 `FOCUSED document web`，而另一个 `Unnamed` 应用存在 `ACTIVE frame`；GNOME Shell 自身也有 ACTIVE window。也就是说，桌面上确实同时存在跨应用的 stale FOCUSED 与真实 ACTIVE 状态。
+- 当前 `_scan_atspi_desktop()` 会先拿整棵树 DFS 的钉钉 FOCUSED，并因它是“明确普通窗口”而完全不检查另一个应用的 ACTIVE frame。这不是理论风险，而是本机实时证据，足以解释用户点击 terminal 后仍被旧普通应用样本投票成 Ctrl+V。
+- 修复方向因此可以裁决为 classifier 主分支：优先选择非 shell 的 ACTIVE 顶层窗口，并只在该 ACTIVE 子树内寻找 focused 控件；跨应用 focused/active 冲突不得把 stale focused 当作明确 normal。Portal modifier 与 clipboard 仍需同时加诊断和防护，但不是当前已复现的首要根因。
+
+### 第一轮修复后的实机采样
+
+- ACTIVE-window-first 实现后，在同一桌面状态连续采样 5 次均返回 `Google Chrome/frame` 且 `source=active_window`；旧算法同一环境曾在钉钉 FOCUSED、Unnamed ACTIVE 和 GNOME Shell 之间跳动。
+- 新投票摘要在该普通窗口为 normal=5、terminal=0、uncertain=0，说明修复不是简单把 unknown 改成 terminal，而是从真实 ACTIVE 证据稳定得到普通窗口结论。
+- 当前直接以 `/usr/bin/python3` 运行源码时不会再启动“alternate system Python”，因为当前解释器本身已经可导入 AT-SPI；打包后的 `/opt/voicing/voicing` 则会使用 `/usr/bin/python3` helper。该差异是预期行为，后续需通过 PyInstaller/DEB 产物验证 helper 分支。
+
+### 新测试契约
+
+- 自动模式只有达到至少 2 个可靠同类票，或在存在冲突时领先至少 2 票，才允许选择 terminal/normal；单个 normal、全 uncertain、1:1 冲突均为 unresolved。
+- unresolved 不再借 terminal cache 或默认 normal 发键；`_resolve_wayland_paste_sequence()` 会抛错，WebSocket ACK 因注入失败保持 `clear_input=false`。
+- 首次 portal 会话使用 pre/post 两份判定：一侧可靠而另一侧 unresolved 时使用可靠证据；两侧可靠且冲突时取消，避免授权交互期间焦点变化导致误发。
+- portal 中途失败后会按逆序 best-effort 释放已确认按下的键；测试已锁定 Ctrl press 成功、V press 失败时仍补发 Ctrl release。
+
+### 环境与 helper 验证
+
+- 新建 `.venv` 安装锁定依赖后完整 PC suite 已达到 112 tests OK，说明本轮平台层重构没有破坏 server ACK、网络、协议或托盘回归。
+- 从 `.venv/bin/python` 调用时无法 in-process 导入 `gi`，代码成功自动切到 `/usr/bin/python3` helper；helper 输出与主进程新 ACTIVE-first 算法一致，连续 5 个样本均为同一真实 active window。这直接覆盖打包应用最关键的 helper 路径。
+- 当前 clipboard 只读 MIME 列表包含 `text/plain;charset=utf-8`、`UTF8_STRING` 等文本类型，因此可以安全地把原文本只保存在进程内，短暂写入测试 token 后再恢复，不需要把用户剪贴板正文写入日志或文件。
+- 真实 clipboard roundtrip 已通过：写入随机 token、回读相等、恢复旧文本、再次回读相等；这排除了安装 `wl-clipboard` 后仍发送旧图片内容的路径。
+- 普通窗口 20 轮 helper 压力结果是 20/20 normal、116/116 样本同一 ACTIVE Chrome、0 reason；ACTIVE-first 对此前已复现的跨应用 stale focus 抖动产生了稳定改善。
+
+### 终端实机验证的焦点控制限制
+
+- 仅调用 `gnome-terminal` 新建窗口不会可靠抢占 GNOME Wayland 当前焦点；随后 20 轮采样继续稳定报告 Chrome，这证明分类器没有因为“存在一个 terminal 窗口”就误判 terminal，但该轮不是终端前台验收。
+- 临时窗口在 AT-SPI 树中以 `gnome-terminal-server/frame/Voicing-Terminal-Test` 出现；某次局部枚举短暂显示 ACTIVE，下一次全局枚举又只显示 Chrome ACTIVE，说明测试必须在采样前明确验证目标 frame 当前 ACTIVE，不能把“窗口已创建”当作“窗口已聚焦”。
+
+### 第二轮稳健性收紧
+
+- ACTIVE 候选排序改为 dialog/alert > frame > window > 其他；同一最高优先级若仍有多个真实窗口，直接 unresolved。这样既能忽略底层 stale application/window，又不会在两个并存 frame 间任意选一个。
+- terminal 名单现只保留在主进程分类器；system helper 负责返回带 `source/reason` 的原始 active/focused 证据，避免未来新增 terminal 时两份名单不一致。
+- 诊断日志测试确认不会记录 AT-SPI window `name`，因此不会把文档标题、terminal title 或用户文本泄漏到日志；仅记录 app、role、证据来源与原因。
+
+### 阶段 33 续接基线与启动预热决策
+
+- 当前修改后的键盘专项为 55 项、完整 PC suite 为 115 项，续接后重跑均通过；`git diff --check` 也通过。
+- 根 `AGENTS.md` / `CLAUDE.md` 仍保留“terminal 名单在主进程和 helper 重复”及“阶段 31 修复尚未实施”的旧描述，与当前实现不符，发布前必须两份同步修正。
+- 当前首次实际粘贴会在 pre-portal 阶段才首次启动 AT-SPI/system-Python helper 探测。新增后台只读预热具有低风险价值：可提前初始化/诊断 AT-SPI 路径，但必须严格禁止创建 RemoteDesktop Portal session、缓存 terminal/normal 决策或发送任何按键。
+- 预热实现已在真实 Wayland 会话验证：后台 probe 得到 6 个一致的 ACTIVE Chrome 样本并正常退出，进程内 `_PORTAL_BACKEND` 仍为 `None`；说明预热与授权/输入注入边界保持隔离。
+
+### 发布配置与公开文档复核
+
+- `.github/workflows/release.yml` 的 Ubuntu 22.04 job 已同步安装 `at-spi2-core`、`gir1.2-atspi-2.0`、`python3-gi`、`wl-clipboard`，DEB `Depends` 也包含同一组运行时依赖；该修改能让干净安装具备分类和 Wayland 文本剪贴板前提。
+- 根中英文 README 与 Android 中英文 README 仍描述“焦点 unresolved 时回退 Ctrl+V/近期 terminal cache”，与当前三态安全取消、无 terminal cache 实现相反；v2.9.10 文档必须明确 unresolved 不发送快捷键且手机输入由 ACK 语义保留。
+- 仓库记录中的 `/home/kevinlasnh/development/flutter-3.27.0/bin/flutter` 当前不存在且 `flutter` 不在 PATH；需要继续寻找本机 SDK或恢复固定 3.27.0 工具链后再执行 Android 验证。
+- 本地严格复现 workflow 的 `dpkg-deb --build` 后，包内容保留构建用户 UID/GID，desktop 文件也随本机 umask 成为 0664；CI runner 会有同类风险。使用 `chmod 0644` 和 `dpkg-deb --root-owner-group` 后，包内目录/文件/链接全部为标准 `root/root` 与预期 mode。
+- 官方 Flutter 3.27.0 archive MD5 与 HTTP 元数据一致，Android command-line tools ZIP 完整性校验通过；Flutter 3.27.0 默认 compileSdk/targetSdk 均为 35，项目另行锁定 NDK `27.0.12077973`。
+- 底层 `type_text_at_cursor()` 虽已把 Wayland 默认恢复延迟设为 350ms，但正式入口 `voice_coding.type_text()` 仍传入 100ms，导致真实 WebSocket 路径绕过修复。删除显式参数后，Wayland 使用 350ms，其他平台仍使用底层 100ms 默认；新增双层测试锁定该不变量。
+- 恢复工具链后 Android 本地 debug 与显式 debug-signing 豁免的 release APK 均可构建；release APK manifest 为 `2.9.10` / versionCode `11`，压缩包与签名结构校验通过。正式签名材料未写入本机或仓库，仍只由 Actions Secrets 提供。
+- 最终 20 轮普通窗口采样再次全部选中同一 ACTIVE Chrome，且无 uncertain；结合此前 stale FOCUSED 复现，说明 ACTIVE-first 在普通窗口侧的稳定性已重复成立。
+- 最终 PyInstaller frozen smoke 也通过 system-Python helper 得到 ACTIVE Chrome readiness，证明新启动预热已进入实际 onefile 产物；offscreen 无托盘和 9527 被已安装版占用属于受控 smoke 环境限制，不是新产物启动回归。
+
+### 续接时的人工焦点协调证据
+
+- 在用户尚未于真实终端建立 ACTIVE 焦点时，新增的验收脚本连续 20 轮都稳定识别为 Google Chrome normal，并因 terminal 全通过门槛未满足而明确输出 `FAILED_NO_KEYS_SENT`；这再次证明安全取消路径不会把普通窗口误当 terminal，也不会为了完成测试而发送快捷键。
+- 仅靠聊天中的倒计时提示不足以建立终端焦点；更可靠的协调方式是由用户在目标终端执行唯一 sentinel `touch` 命令，令 shell 执行完成后自然保持 terminal ACTIVE，再由后台测试进程采样和粘贴。
+- 本次 sentinel 在约 90 秒内未出现，后台进程已被中断；这不是实现失败，也没有产生 clipboard/Portal/键盘副作用。发布门槛仍要求用户实际触发该握手后取得 terminal 20/20、`portal_sequence=ctrl_shift_v`、成对 release、剪贴板恢复和可见文本证据。
+- 当前源码的最终 PC 回归基线已提升为 122 tests OK，且语法与 diff 校验通过；剩余不确定性不在单元测试覆盖，而在 GNOME Wayland 的真实前台焦点与 Portal 投递时序，因此不能用更多 mocked tests 替代双场景实机门槛。
+- v2.9.10 本地 release APK 实际大小为 31.7 MB，根 README 原有的约 21 MB 已过时；公开体积说明应写约 32 MB，避免发布页面与真实资产明显不一致。
+- 真实 terminal ACTIVE 焦点无法由 GNOME Wayland 后台自动化可靠建立，且用户 sentinel 连续三个目标回合未触发；继续自动重试只会重复同一失败条件。必须由用户恢复目标后，在空白终端执行新的就绪握手，才能取得发布所需的 terminal/normal 双场景直接证据。
+
+### Ghostty 的实际 AT-SPI 身份缺口
+
+- 用户真实聚焦 Ghostty 后，分类器连续 20 轮都获得同一个可靠 ACTIVE frame，但 `app_name=Unnamed`、`role=frame`，因此旧逻辑确定性判 normal；这不是采样抖动，也不是 stale focus。
+- 该 ACTIVE accessible 的 AT-SPI process ID 可可靠映射到 `/proc/<pid>/exe`、`comm` 与 `cmdline[0]` basename `ghostty`；应用 toolkit 为 GTK 4.14.5。子树只有 frame/panel，无 focused、editable 或 terminal 角色，说明继续扩大角色扫描也无法识别。
+- 窗口标题可能包含用户路径或会话内容，不能用于 terminal 识别或日志；可执行文件 basename 是隐私风险更低、跨 Ghostty 标题变化稳定、且能复用现有 terminal 名单的身份信号。主进程和打包态 system-Python helper 必须同时输出 `process_name`，最终分类统一在主进程完成。
+- `process_name` 修复在同一真实现场立即把 Ghostty 从 20/20 normal 翻转为 20/20 terminal，且所有样本仍来自同一 ACTIVE frame；这直接证明修复命中了身份根因，而不是依靠宽泛“unknown 即 terminal”或缓存掩盖问题。
+- Portal 的独立测试进程必须像产品一样持有全局 Qt application；否则 `is_available()` 使用的临时 `QCoreApplication` 生命周期结束后可能让后续 Qt D-Bus request 超时。真实 `voice_coding.main()` 已始终持有 `QApplication`，无需因此修改产品代码。
+- 在真实产品生命周期下，Chrome 与 Ghostty 两侧都已取得 Portal 的完整结构化证据：分别为 `ctrl_v` 4 事件和 `ctrl_shift_v` 6 事件，所有 modifier 均释放且 clipboard restore 均 MATCH。剩余非空内容 proof 应复用同一已授权 backend，而不是为每次断言新建 Portal session。
+- GNOME 42 RemoteDesktop `Start` chooser 在无人值守状态下既不通过 AT-SPI 暴露可操作 action/坐标，也不接受临时 ydotool 的三种确认序列；继续盲试会增加误输入风险。非空 proof 因授权 UI 无法自动化而缺失，但实际 clipboard roundtrip、normal/terminal Portal 键序列和 modifier 释放已分别取得直接证据。
+- `dpkg-deb --root-owner-group` 只规范 owner，不规范源目录 mode；即使 CI 常见 umask 为 022，workflow 仍应显式把 package root 目录设为 0755，才能保证本地与 CI 构建一致。
+
+### v2.9.10 发布前门槛裁决
+
+- 原故障链路已由直接证据闭环：旧实现把真实 Ghostty 的 `Unnamed/frame` 连续 20/20 判为 normal；加入 `process_name=ghostty` 后同一 ACTIVE 身份连续 20/20 判为 terminal，说明修复命中了身份根因而非依赖缓存或 unknown 猜测。
+- Chrome 与 Ghostty 的真实 Portal 键序列、modifier 成对释放、Wayland clipboard 写入回读和恢复均已独立验证；结合 129 项 PC 回归与 24 项 Flutter 测试，现有证据足以完成原“稳定识别并稳定粘贴”的发布门槛。GNOME 42 chooser 阻止无人值守非空 proof 属于授权 UI 自动化限制，不能冒充产品输入失败，也不应继续以盲发按键绕过。
+- `process_name` 只能保存和记录 basename；不得扩展为 PID、完整路径、命令行、窗口标题或正文。`Unnamed` 且没有可靠进程身份时必须保持 unresolved，不得恢复默认 Ctrl+V。
+- Linux 发布包的可复现权限必须显式声明：`dpkg-deb --root-owner-group` 负责 root/root，workflow 的 `find ... chmod 0755` 负责目录，安装步骤/显式 chmod 负责可执行文件 0755 与元数据 0644；不能依赖构建机 umask。

@@ -15,6 +15,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.9.10] - 2026-07-28
+
+### Fixed
+
+- PC (Linux): GNOME Wayland Auto paste now selects the current non-shell AT-SPI `ACTIVE` window first and only trusts focused controls inside that window, preventing stale `FOCUSED` state from a previous app from choosing Ctrl+V in a terminal
+- PC (Linux): terminals such as Ghostty that expose a generic `Unnamed` AT-SPI frame are now identified from the active accessible process executable basename; window titles and clipboard text are never used for classification or diagnostics
+- PC (Linux): Auto paste now uses terminal / normal / unresolved decisions with bounded retries; sparse or conflicting focus evidence cancels the attempt and preserves the phone input instead of guessing a shortcut
+- PC (Linux): the first RemoteDesktop portal session reconciles focus evidence from before and after authorization, and partial portal failures now release any pressed Ctrl/Shift modifiers
+- PC (Linux): Wayland clipboard writes require `wl-clipboard`, are read back before sending keys, and only restore a previous clipboard value when it was actually readable after a longer paste settle delay
+- PC (Linux): startup performs a read-only AT-SPI prewarm, system-Python fallback is used when in-process samples are all uncertain, and structured diagnostics omit text and window titles
+- Packaging (Linux): release runners and Debian dependencies now include AT-SPI, Python GI, and `wl-clipboard` runtime requirements; DEB contents are normalized to root ownership, 0755 directories/executables, and 0644 metadata/icons
+
+### 修复
+
+- PC (Linux): GNOME Wayland 自动粘贴现在先选择当前非 Shell 的 AT-SPI `ACTIVE` 窗口，只信任该窗口子树内的 focused 控件，避免上一个应用残留的 `FOCUSED` 状态让终端误走 Ctrl+V
+- PC (Linux): 对 Ghostty 这类只暴露通用 `Unnamed` AT-SPI frame 的终端，现在会读取当前 accessible 对应进程的可执行文件 basename 来识别；分类和诊断均不使用窗口标题或剪贴板正文
+- PC (Linux): 自动粘贴改为 terminal / normal / unresolved 三态并进行有界重试；焦点证据稀疏或冲突时会取消本次发送并保留手机输入，不再猜测快捷键
+- PC (Linux): 首次 RemoteDesktop portal 会话会协调授权前后的焦点证据；portal 中途失败时会补偿释放已按下的 Ctrl/Shift 修饰键
+- PC (Linux): Wayland 剪贴板强制使用 `wl-clipboard`，发送按键前回读验证写入结果，并在更长的粘贴等待后只对确实可读的旧剪贴板执行恢复
+- PC (Linux): 启动时执行只读 AT-SPI 预热；进程内样本全不确定时会使用 system-Python helper；结构化诊断不会记录文本或窗口标题
+- Packaging (Linux): Release runner 与 Debian 依赖现在包含 AT-SPI、Python GI 和 `wl-clipboard` 运行时要求；DEB 内容统一为 root 所有权、目录/可执行文件 0755、元数据/图标 0644
+
+---
+
 ## [2.9.9] - 2026-06-22
 
 ### Fixed

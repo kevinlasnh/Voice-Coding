@@ -187,5 +187,48 @@ class SyncStateBroadcastTests(unittest.TestCase):
             voice_coding.state.server_loop = old_loop
 
 
+class MainStartupTests(unittest.TestCase):
+    def test_main_starts_focus_prewarm_before_network_and_server(self):
+        import voice_coding
+
+        events = []
+        server_thread = MagicMock()
+        with (
+            patch.object(voice_coding, "setup_logging"),
+            patch.object(
+                voice_coding,
+                "ensure_runtime_supported",
+                side_effect=lambda: events.append("runtime"),
+            ),
+            patch.object(
+                voice_coding,
+                "start_wayland_focus_prewarm",
+                side_effect=lambda: events.append("prewarm"),
+            ) as prewarm,
+            patch.object(
+                voice_coding,
+                "refresh_server_interfaces",
+                side_effect=lambda **_kwargs: events.append("network"),
+            ),
+            patch.object(voice_coding, "get_primary_server_ip", return_value="127.0.0.1"),
+            patch.object(
+                voice_coding.threading,
+                "Thread",
+                return_value=server_thread,
+            ) as thread_factory,
+            patch.object(
+                voice_coding,
+                "run_tray",
+                side_effect=lambda: events.append("tray"),
+            ),
+        ):
+            voice_coding.main()
+
+        self.assertEqual(events, ["runtime", "prewarm", "network", "tray"])
+        prewarm.assert_called_once_with()
+        thread_factory.assert_called_once_with(target=voice_coding.run_server, daemon=True)
+        server_thread.start.assert_called_once_with()
+
+
 if __name__ == "__main__":
     unittest.main()

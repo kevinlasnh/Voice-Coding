@@ -286,7 +286,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libegl1 libdbus-1-3 libxkbcommon-x11-0 libxcb-cursor0
+          sudo apt-get install -y at-spi2-core gir1.2-atspi-2.0 libegl1 libdbus-1-3 libxkbcommon-x11-0 libxcb-cursor0 python3-gi wl-clipboard
 
       - name: Install dependencies
         working-directory: pc
@@ -339,13 +339,17 @@ jobs:
           Priority: optional
           Architecture: amd64
           Maintainer: Kevin <kevinlasnh@users.noreply.github.com>
-          Depends: libegl1, libdbus-1-3, libxkbcommon-x11-0, libxcb-cursor0
+          Depends: at-spi2-core, gir1.2-atspi-2.0, libegl1, libdbus-1-3, libxkbcommon-x11-0, libxcb-cursor0, python3-gi, wl-clipboard
           Description: Phone to desktop voice input bridge
            Voicing receives text from an Android phone and injects it at the
            current desktop cursor position.
           EOF
 
-          dpkg-deb --build "$PKG_ROOT" "pc/dist/voicing-linux-amd64.deb"
+          chmod 0644 \
+            "$PKG_ROOT/DEBIAN/control" \
+            "$PKG_ROOT/usr/share/applications/voicing.desktop"
+          find "$PKG_ROOT" -type d -exec chmod 0755 {} +
+          dpkg-deb --root-owner-group --build "$PKG_ROOT" "pc/dist/voicing-linux-amd64.deb"
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02

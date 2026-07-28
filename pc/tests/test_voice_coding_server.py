@@ -127,5 +127,22 @@ class HandleClientTests(unittest.TestCase):
         self.assertFalse(websocket.sent[-1]["clear_input"])
 
 
+class TypeTextTests(unittest.TestCase):
+    def test_type_text_uses_platform_specific_clipboard_restore_delay(self):
+        old_sync_enabled = voice_coding.state.sync_enabled
+        try:
+            voice_coding.state.sync_enabled = True
+            with patch("voice_coding.type_text_at_cursor") as type_at_cursor:
+                self.assertTrue(voice_coding.type_text("hello", auto_enter=True))
+        finally:
+            voice_coding.state.sync_enabled = old_sync_enabled
+
+        type_at_cursor.assert_called_once_with(
+            "hello",
+            auto_enter=True,
+            enter_delay_sec=voice_coding.AUTO_ENTER_SETTLE_DELAY_SEC,
+        )
+
+
 if __name__ == "__main__":
     unittest.main()

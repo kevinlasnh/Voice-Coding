@@ -4,7 +4,7 @@
 系统检查当前仓库的结构、入口、依赖、运行方式和主要功能，向用户说明这个项目是在做什么。
 
 ## 当前阶段
-阶段 32（complete）
+阶段 33（in_progress）
 
 ## 各阶段
 
@@ -261,6 +261,17 @@
 - [x] 同步 PWF 三件套，提交本次应推送文件并推送当前分支
 - **状态：** complete
 
+### 阶段 33：Ubuntu 22.04 GNOME Wayland 终端识别稳定性修复与 v2.9.10 发布
+- [x] 恢复阶段 31 调研结论，复核当前环境、运行日志和终端/非终端粘贴全链路
+- [x] 为焦点采样、helper 状态、AUTO 决策和 portal 键序列补充可验证的结构化诊断
+- [x] 实现 terminal / normal / unresolved 三态识别、就绪重采样和安全失败语义
+- [x] 补齐分类器、冷启动稀疏样本、Portal modifier、剪贴板恢复和 ACK 回归/压力测试
+- [x] 在 Ubuntu 22.04 GNOME Wayland 对 terminal 与普通窗口进行重复实机验证，失败则继续修复重测
+- [x] 同步 PC/Android 版本、CHANGELOG 与中英文文档，并完成 PC/Android 发布前验证
+- [ ] 记录 PWF，提交并推送 `main`，创建 `v2.9.10` tag 触发 GitHub Actions
+- [ ] 确认 Actions 全绿并核验新 deb、apk 及其余 Release 资产
+- **状态：** in_progress
+
 ## 关键问题
 1. 这个仓库的产品目标和核心使用场景是什么？
 2. PC 端、Android 端和 protocol 目录之间如何协作？
@@ -287,6 +298,16 @@
 | 已发布 `v2.9.5` deb 在 GNOME Wayland 下误报 RemoteDesktop portal 键盘能力不可用 | 1 | 清理 PyInstaller 打包态调用系统命令时的 `LD_LIBRARY_PATH`，并发布 `v2.9.6` |
 | `v2.9.6` 首次 release run 中 macOS `Create DMG` 报 `hdiutil: create failed - Resource busy` | 1 | 使用 GitHub Actions failed-job rerun 后通过，判断为 macOS runner 临时资源占用 |
 | Heavy Research 联网报告首轮含省略号占位 | 1 | 按相同维度 prompt 自动重跑，第二轮通过 12/12 结构与占位符校验 |
+| 第一轮键盘测试因旧 terminal cache API 已移除而 45 项均在 setUp 失败 | 1 | 删除旧 cache 测试前置，并按三态/ACTIVE-first/clipboard/portal 新语义重写回归测试 |
+| 完整 PC suite 使用系统 Python 时 4 个模块因缺少 `qrcode` 无法导入 | 1 | 创建仓库 `.venv` 并安装 `pc/requirements.txt`，之后用隔离环境重跑完整测试 |
+| 创建 `.venv` 时 Ubuntu 缺少 ensurepip / `python3.10-venv` | 1 | 使用免密 sudo 安装 `python3.10-venv`，再以 `--clear` 重建已生成的局部 venv |
+| Wayland 自动化无法可靠把临时 GNOME Terminal 切到前台 | 3 | 新窗口受 focus-stealing prevention 限制，frame `grab_focus()` 返回 false，深层 terminal 扫描又超时；停止重复该路线，后续采用用户真实点击/已聚焦终端验证 |
+| Ghostty 的真实 ACTIVE 窗口被 AT-SPI 暴露为 `Unnamed/frame` 且无 terminal/focused 子节点 | 1 | 从 ACTIVE accessible 的 AT-SPI PID 读取仅包含可执行文件 basename 的 `process_name`，由主分类器与 system helper 统一将 `ghostty` 判为 terminal；禁止依赖窗口标题或正文 |
+| 独立 Portal harness 未持有全局 Qt application 时 `CreateSession` 超时 | 2 | 按真实产品生命周期持有全局 `QCoreApplication`；同一实现随后在 normal 与 terminal 两侧均成功建立并发送完整键序列 |
+| 非空 Ghostty proof 使用第二个新 Portal 会话时停在 `Start` 授权并超时 | 1 | 不把授权超时当作输入成功；下一步在单个已授权 Portal backend 生命周期内连续完成空文本和非空 proof，避免重复授权窗口 |
+| 本地 DEB 临时目录脚本因包含递归清理被安全策略拒绝 | 1 | 未发生删除；改用 PyInstaller 已重建且受 ignore 管理的 `pc/dist/deb-root`，不执行递归清理 |
+| 按旧 workflow 本地打出的 DEB 内容保留普通用户所有权与 umask 模式 | 1 | workflow 改用 `chmod 0644` 与 `dpkg-deb --root-owner-group`，重建后全部内容为 `root/root` |
+| 最终 DEB 重打包检测到上次 `deb-root` 仍存在并主动退出 | 1 | 未覆盖旧目录；将旧目录移动为 ignore 内备份，再从最终二进制创建全新 package root |
 
 ## 备注
 - PWF 内容仅记录 agent 自己的检查计划和发现；外部内容如需引用只进入 findings.md。

@@ -9,7 +9,7 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![GitHub release](https://img.shields.io/github/v/release/kevinlasnh/Voicing)](https://github.com/kevinlasnh/Voicing/releases/latest)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Android-blueviolet)](#)
-[![Version](https://img.shields.io/badge/version-2.9.9-green)](#)
+[![Version](https://img.shields.io/badge/version-2.9.10-green)](#)
 
 **English** | [简体中文](README.zh-CN.md)
 
@@ -36,9 +36,9 @@ Voicing turns your phone's voice keyboard into your computer's "mouth" — speak
 - **Manual Enter still works** — press Enter to submit, useful when you want to edit first
 - **Undo** — accidentally sent something? One tap to take it back
 - **Auto reconnect** — wakes from screen-off and prefers showing "connected" while reconnecting
-- **Terminal-aware Linux paste** — GNOME Wayland Auto paste uses Ctrl+V for normal windows and Ctrl+Shift+V for detected terminal focus
+- **Stable terminal-aware Linux paste** — GNOME Wayland Auto paste follows the current ACTIVE window, uses Ctrl+V for normal windows, Ctrl+Shift+V for terminals, and safely cancels unresolved attempts
 - **Cross-platform** — Windows / macOS / Linux desktop, plus Android phone client
-- **Compact** — 21 MB APK, ~50 MB desktop, no runtime dependencies
+- **Compact** — ~32 MB APK and ~50–60 MB desktop bundles; the Linux DEB installs its declared desktop-integration dependencies
 
 ## Quick start
 
@@ -63,7 +63,7 @@ Run the desktop app → start a hotspot / Internet sharing / join the same LAN �
 
 - **Windows**: run `voicing-windows-x64.exe` and turn on "Mobile hotspot"
 - **macOS**: open `voicing-macos-arm64.dmg`, drag to Applications (right-click → Open the first time), enable "Internet Sharing" or join the same LAN
-- **Linux**: install `voicing-linux-amd64.deb`, or run the standalone binary with `chmod +x voicing-linux-x86_64`; start a Wi-Fi hotspot or join the same LAN. GNOME Wayland may ask you to approve a RemoteDesktop keyboard session when Voicing starts or when text is pasted.
+- **Linux**: install `voicing-linux-amd64.deb`, or run the standalone binary with `chmod +x voicing-linux-x86_64`; start a Wi-Fi hotspot or join the same LAN. The DEB installs the required AT-SPI, Python GI, and `wl-clipboard` packages. Standalone-binary users must provide them separately. GNOME Wayland may ask you to approve a RemoteDesktop keyboard session when Voicing starts or when text is pasted.
 
 When the status bar shows "Connected" you're good to go.
 
@@ -75,7 +75,7 @@ After a successful scan the phone remembers this PC and its candidate IP pool. O
 2. On the phone, switch to a voice keyboard and start talking
 3. The text appears on the computer
 
-On Linux/GNOME Wayland, keep the desktop paste mode on **Auto paste** for normal use. Auto paste samples focus briefly, sends Ctrl+V to normal input fields, and switches to Ctrl+Shift+V when the focused app is detected as a terminal. If focus detection is temporarily unresolved, Auto paste uses Ctrl+V unless a terminal was detected very recently; switch to Terminal paste only if a specific terminal is not detected.
+On Linux/GNOME Wayland, keep the desktop paste mode on **Auto paste** for normal use. Auto paste samples the current ACTIVE window, sends Ctrl+V to normal input fields, and switches to Ctrl+Shift+V for terminals. Terminals such as Ghostty that expose a generic `Unnamed` AT-SPI frame are identified from the process executable basename, never from window titles or clipboard text. If focus evidence remains sparse or conflicting, Voicing sends no shortcut and returns a failed ACK so the phone keeps the text for retry instead of risking a paste into the wrong app. Switch to Terminal paste only if a specific terminal cannot expose reliable AT-SPI state.
 
 > **Recommended setup**: [Doubao Input](https://shurufa.doubao.com/) + [DJI Mic Mini](https://www.dji.com/mic-mini) + [DJI Mic Mobile Receiver](https://store.dji.com/product/dji-mic-series-mobile-receiver) — accurate ASR, lavalier mic plugged straight into the phone, best overall experience.
 
@@ -118,7 +118,7 @@ Tray icon states:
 7. The Android WebSocket prefers binding to the physical WiFi `Network`; the PC filters VPN / virtual adapters, and Android explicitly requires a non-VPN WiFi Network
 8. Phone text (voice or typed) streams to the desktop in real time
 9. The desktop pastes via the clipboard and emits an Enter when needed; Linux X11 uses the normal Ctrl+V path, while GNOME Wayland uses the RemoteDesktop portal keyboard permission
-10. GNOME Wayland defaults to Auto paste: normal windows receive Ctrl+V, detected terminal focus receives Ctrl+Shift+V, and the tray menu can switch manually to normal, terminal, or compatibility paste modes
+10. GNOME Wayland defaults to Auto paste: normal windows receive Ctrl+V, detected terminal focus receives Ctrl+Shift+V, unresolved focus cancels safely while preserving phone input, and the tray menu can switch manually to normal, terminal, or compatibility paste modes
 
 ## Development
 
@@ -177,8 +177,8 @@ Voicing/
 Production releases run through GitHub Actions, building all four platforms (Android / Windows / macOS / Linux):
 
 ```bash
-git tag v2.9.9
-git push origin v2.9.9
+git tag v2.9.10
+git push origin v2.9.10
 ```
 
 Local debug builds:
