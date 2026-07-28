@@ -558,3 +558,9 @@
 
 - `softprops/action-gh-release` 上传 `release-assets/<platform>/<filename>` 后，Release 页面只保留 `<filename>` basename；因此 `SHA256SUMS.txt` 也必须使用扁平 basename。若保留 CI artifact 子目录，哈希数值仍可正确，但用户在同一目录下载资产后无法直接运行 `sha256sum -c`。
 - 发布后校验不能只比较 GitHub API 的 digest 或手工去前缀；验收门槛应实际下载全部资产，并在不改写 checksum 文件的情况下运行原生 `sha256sum -c SHA256SUMS.txt`。workflow 同时应断言固定条目数和文件名无 `/`，避免以后目录结构调整再次引入同类问题。
+
+## 2026-07-28 最终交接结论
+
+- 本次进度记录没有产生新的技术发现、实现变更或阻断项；阶段 33 与 `v2.9.10` 发布闭环保持完成状态。
+- 本次 checkpoint 前的可恢复 Git 基线为 `e0c0074fd6f9a62ec725636e0d10be92d6f9b162`，对应已推送的 checksum workflow 防回归修复；`v2.9.10` tag 继续固定指向发布提交 `fa09391`，无需移动或重建。
+- 对外最终交付基线为 GitHub Actions run `30330984843` 成功、Release `v2.9.10` 六个资产齐全，且修正版 `SHA256SUMS.txt` 可在扁平下载目录直接验证五个 payload。
